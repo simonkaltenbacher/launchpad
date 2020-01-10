@@ -1,0 +1,103 @@
+cabal-version: 1.12
+
+-- This file has been generated from package.yaml by hpack version 0.31.2.
+--
+-- see: https://github.com/sol/hpack
+--
+-- hash: 376a1b25c4c3418741fe2d5ec10a9ddf529c32e8f809d768d68414d55311fe86
+
+name:           launchpad
+version:        0.1.0.0
+description:    Please see the README on GitHub at <https://github.com/simonkaltenbacher/launchpad#readme>
+homepage:       https://github.com/simonkaltenbacher/launchpad#readme
+bug-reports:    https://github.com/simonkaltenbacher/launchpad/issues
+author:         Simon Kaltenbacher
+maintainer:     simonkaltenbacher@gmail.com
+copyright:      2020 Simon Kaltenbacher
+build-type:     Simple
+extra-source-files:
+    README.md
+
+source-repository head
+  type: git
+  location: https://github.com/simonkaltenbacher/launchpad
+
+library
+  exposed-modules:
+      LaunchPad.Deploy
+      LaunchPad.Type
+      LaunchPad.Type.Dhall
+  other-modules:
+      Paths_launchpad
+  hs-source-dirs:
+      src
+  build-depends:
+      amazonka
+    , amazonka-cloudformation
+    , amazonka-s3
+    , base >=4.7 && <5
+    , bytestring
+    , conduit
+    , dhall
+    , exceptions
+    , lens
+    , mtl
+    , optparse-applicative
+    , path
+    , path-io
+    , text
+    , transformers
+  default-language: Haskell2010
+
+executable launchpad-exe
+  main-is: Main.hs
+  other-modules:
+      Paths_launchpad
+  hs-source-dirs:
+      app
+  ghc-options: -threaded -rtsopts -with-rtsopts=-N
+  build-depends:
+      amazonka
+    , amazonka-cloudformation
+    , amazonka-s3
+    , base >=4.7 && <5
+    , bytestring
+    , conduit
+    , dhall
+    , exceptions
+    , launchpad
+    , lens
+    , mtl
+    , optparse-applicative
+    , path
+    , path-io
+    , text
+    , transformers
+  default-language: Haskell2010
+
+test-suite launchpad-test
+  type: exitcode-stdio-1.0
+  main-is: Spec.hs
+  other-modules:
+      Paths_launchpad
+  hs-source-dirs:
+      test
+  ghc-options: -threaded -rtsopts -with-rtsopts=-N
+  build-depends:
+      amazonka
+    , amazonka-cloudformation
+    , amazonka-s3
+    , base >=4.7 && <5
+    , bytestring
+    , conduit
+    , dhall
+    , exceptions
+    , launchpad
+    , lens
+    , mtl
+    , optparse-applicative
+    , path
+    , path-io
+    , text
+    , transformers
+  default-language: Haskell2010

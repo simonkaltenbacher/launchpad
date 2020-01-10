@@ -1,0 +1,12 @@
+resolver: lts-14.20
+
+packages:
+- .
+
+extra-deps:
+- amazonka-1.6.1
+- amazonka-cloudformation-1.6.1
+- amazonka-core-1.6.1
+- amazonka-s3-1.6.1
+- dhall-1.28.0
+- prettyprinter-1.5.1

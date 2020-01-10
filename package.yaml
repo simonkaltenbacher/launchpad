@@ -1,0 +1,53 @@
+name:                launchpad
+version:             0.1.0.0
+github:              "simonkaltenbacher/launchpad"
+author:              "Simon Kaltenbacher"
+maintainer:          "simonkaltenbacher@gmail.com"
+copyright:           "2020 Simon Kaltenbacher"
+
+extra-source-files:
+- README.md
+
+description:         Please see the README on GitHub at <https://github.com/simonkaltenbacher/launchpad#readme>
+
+dependencies:
+- amazonka
+- amazonka-cloudformation
+- amazonka-s3
+- base >= 4.7 && < 5
+- bytestring
+- conduit
+- dhall
+- exceptions
+- lens
+- mtl
+- optparse-applicative
+- path
+- path-io
+- text
+- transformers
+
+library:
+  source-dirs: src
+
+executables:
+  launchpad-exe:
+    main:                Main.hs
+    source-dirs:         app
+    ghc-options:
+    - -threaded
+    - -rtsopts
+    - -with-rtsopts=-N
+    dependencies:
+    - launchpad
+
+tests:
+  launchpad-test:
+    main:                Spec.hs
+    source-dirs:         test
+    ghc-options:
+    - -threaded
+    - -rtsopts
+    - -with-rtsopts=-N
+    dependencies:
+    - launchpad
