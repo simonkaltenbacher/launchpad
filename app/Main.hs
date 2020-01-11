@@ -11,6 +11,7 @@ import           Control.Monad.Trans.Reader
 import           Data.Bifunctor             (first)
 import           Data.Functor               ((<&>))
 import           Data.Text                  (Text)
+import           Data.Text.IO               (putStrLn)
 
 import           Dhall
 
@@ -24,6 +25,11 @@ import           Options.Applicative
 
 import           Path
 
+import           Prelude                    hiding (putStrLn)
+
+import           TextShow                   (showt)
+
+
 main :: IO ()
 main = join $ execParser opts
 
@@ -33,7 +39,7 @@ opts = info (run <$> confFileOpt <*> stackNameArg <*> templateDirArg <**> helper
     run confFile stackName templateDir = do
       conf <- readConfig templateDir confFile
       stackId <- (runResourceT . runAWST conf . deployStack) stackName
-      putStrLn $ "Stack " <> show stackId
+      putStrLn $ "Stack " <> showt stackId
 
 confFileOpt :: Parser (Path Abs File)
 confFileOpt = option (eitherReader $ first show . parseAbsFile) $

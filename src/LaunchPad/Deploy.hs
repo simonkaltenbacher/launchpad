@@ -24,7 +24,8 @@ import           Control.Monad.Trans.AWS
 import           Data.Foldable              (find, fold)
 import           Data.Function              ((&))
 import           Data.Maybe                 (mapMaybe)
-import           Data.Text                  (pack, Text, unpack)
+import           Data.Text                  (Text, unpack)
+import           Data.Text.IO               (putStr, putStrLn)
 
 import           LaunchPad.Type             (Config, Param, PExpr (..), Stack, StackId (..), TemplateId (..))
 import qualified LaunchPad.Type as T
@@ -34,15 +35,17 @@ import           Network.AWS.S3
 
 import           Path
 
-import           Prelude                    hiding (readFile)
+import           Prelude                    hiding (putStr, putStrLn, readFile)
+
+import           TextShow                   (printT, printTL, showt)
 
 
 type AWSConstraint' m = (MonadThrow m, MonadCatch m, MonadResource m, MonadReader Config m)
 
-data StackNotFoundError = StackNotFoundError String
+data StackNotFoundError = StackNotFoundError Text
   deriving (Eq, Show)
 
-data CreateStackError = CreateStackError String
+data CreateStackError = CreateStackError Text
   deriving (Eq, Show)
 
 instance Exception StackNotFoundError
@@ -74,11 +77,11 @@ performCreateStack T.Stack{..} = handleResp =<< send . createReq =<< asks T.temp
           (pure . StackId)
           (view csrsStackId $ resp)
         else
-          throwM $ CreateStackError ("Received http status " <> show rcode)
+          throwM $ CreateStackError ("Received http status " <> showt rcode)
 
 uploadTemplate :: AWSConstraint' m => TemplateId -> m ()
 uploadTemplate tid = do
-    liftIO $ putStr $ show (unTemplateId tid) <> "... "
+    liftIO $ putStr $ showt tid <> "... "
     templateDir <- asks T.templateDir
     templateBucketName <- asks T.templateBucketName
     body <- readBody templateDir tid
@@ -96,7 +99,7 @@ uploadTemplate tid = do
 findStack :: MonadThrow m => Text -> [Stack] -> m Stack
 findStack stackName = maybe (throwM $ err) pure . find ((== stackName) . T.stackName)
   where
-    err = StackNotFoundError $ "Unable to find Stack " <> unpack stackName <> "."
+    err = StackNotFoundError $ "Unable to find Stack " <> stackName <> "."
 
 listTemplateIds :: Stack -> [TemplateId]
 listTemplateIds T.Stack{..} = stackTemplateId : mapMaybe extract stackParams

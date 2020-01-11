@@ -14,6 +14,6 @@ data DhallConfig = DhallConfig
   { templateBucketName :: Text
   , stacks             :: [Stack]
   }
-  deriving (Eq, Generic, Show)
+  deriving (Eq, Generic)
 
 instance FromDhall DhallConfig
