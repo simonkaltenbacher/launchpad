@@ -4,11 +4,11 @@ module LaunchPad.Type.Dhall (DhallConfig (..)) where
 
 import LaunchPad.Type hiding (Config)
 
-import Data.Text             (Text)
+import Data.Text      (Text)
 
 import Dhall
 
-import GHC.Generics          (Generic)
+import GHC.Generics   (Generic)
 
 data DhallConfig = DhallConfig
   { templateBucketName :: Text

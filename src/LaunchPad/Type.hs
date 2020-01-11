@@ -5,6 +5,7 @@ module LaunchPad.Type
   , Param (..)
   , PExpr (..)
   , Stack (..)
+  , StackId (.. )
   , TemplateId (..)
   )
   where
@@ -41,7 +42,10 @@ data Stack = Stack
 
 instance FromDhall Stack
 
-data Param = Param Text PExpr
+data Param = Param
+  { paramName  :: Text
+  , paramValue :: PExpr
+  }
   deriving (Eq, Generic, Show)
 
 instance FromDhall Param
@@ -57,3 +61,6 @@ newtype TemplateId = TemplateId { unTemplateId :: Text }
   deriving (Eq, Generic, Show)
 
 instance FromDhall TemplateId
+
+newtype StackId = StackId { unStackId :: Text }
+  deriving (Eq, Generic, Show)

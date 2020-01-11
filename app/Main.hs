@@ -12,7 +12,7 @@ import           Data.Bifunctor             (first)
 import           Data.Functor               ((<&>))
 import           Data.Text                  (Text)
 
-import           Dhall                      (inputFile, genericAuto)
+import           Dhall
 
 import           LaunchPad.Deploy
 import           LaunchPad.Type             (Config)
@@ -32,7 +32,8 @@ opts = info (run <$> confFileOpt <*> stackNameArg <*> templateDirArg <**> helper
   where
     run confFile stackName templateDir = do
       conf <- readConfig templateDir confFile
-      (runResourceT . runAWST conf . deployStack) stackName
+      stackId <- (runResourceT . runAWST conf . deployStack) stackName
+      putStrLn $ "Stack " <> show stackId
 
 confFileOpt :: Parser (Path Abs File)
 confFileOpt = option (eitherReader $ first show . parseAbsFile) $
@@ -41,7 +42,7 @@ confFileOpt = option (eitherReader $ first show . parseAbsFile) $
   <> metavar "CONF_FILE"
 
 stackNameArg :: Parser Text
-stackNameArg = argument auto (metavar "STACK_NAME")
+stackNameArg = strArgument (metavar "STACK_NAME")
 
 templateDirArg :: Parser (Path Abs Dir)
 templateDirArg = argument (eitherReader $ first show . parseAbsDir) (metavar "TEMPLATE_DIR")
@@ -53,4 +54,6 @@ readConfig templateDir confFile = do
   return T.Config {..}
 
 readDhallConfig :: Path Abs File -> IO DhallConfig
-readDhallConfig = inputFile genericAuto . toFilePath
+readDhallConfig = inputFile (autoWith interpretOptions) . toFilePath
+  where
+    interpretOptions = defaultInterpretOptions { singletonConstructors = Bare }

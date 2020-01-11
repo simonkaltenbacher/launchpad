@@ -10,21 +10,23 @@ import           Data.ByteString            (readFile)
 
 import           Conduit                    (MonadResource)
 
+import           Control.Exception          (Exception)
+
 import           Control.Lens.Getter        (view)
 import           Control.Lens.Setter        ((.~), (?~))
 
 import           Control.Monad              (liftM, void)
-import           Control.Monad.Catch        (MonadCatch, MonadThrow)
+import           Control.Monad.Catch        (MonadCatch, MonadThrow, throwM)
 import           Control.Monad.IO.Class
 import           Control.Monad.Reader
 import           Control.Monad.Trans.AWS
 
-import           Data.Foldable              (fold)
+import           Data.Foldable              (find, fold)
 import           Data.Function              ((&))
 import           Data.Maybe                 (mapMaybe)
 import           Data.Text                  (pack, Text, unpack)
 
-import           LaunchPad.Type             (Config, Stack, Param (..), PExpr (..), TemplateId (..))
+import           LaunchPad.Type             (Config, Param, PExpr (..), Stack, StackId (..), TemplateId (..))
 import qualified LaunchPad.Type as T
 
 import           Network.AWS.CloudFormation hiding (Stack)
@@ -37,26 +39,46 @@ import           Prelude                    hiding (readFile)
 
 type AWSConstraint' m = (MonadThrow m, MonadCatch m, MonadResource m, MonadReader Config m)
 
-deployStack :: AWSConstraint' m => Text -> m ()
-deployStack stackName = undefined
+data StackNotFoundError = StackNotFoundError String
+  deriving (Eq, Show)
 
-  {-
-  runResourceT . runAWST env $ do
+data CreateStackError = CreateStackError String
+  deriving (Eq, Show)
+
+instance Exception StackNotFoundError
+instance Exception CreateStackError
+
+deployStack :: AWSConstraint' m => Text -> m StackId
+deployStack stackName = do
+  stack <- findStack stackName =<< asks T.stacks
+  liftIO $ putStrLn $ "Uploading templates"
   mapM_ uploadTemplate (listTemplateIds stack)
   performCreateStack stack
-  -}
 
-performCreateStack :: AWSConstraint' m => Stack -> m ()
-performCreateStack T.Stack{..} = do
-  templateBucketName <- asks T.templateBucketName
-  void . send $ createStack (deplEnv <> "-" <> stackName)
-    & csCapabilities    .~ [CapabilityNamedIAM]
-    & csDisableRollback ?~ True
-    & csParameters      .~ fmap (translateParam templateBucketName) stackParams
-    & csTemplateURL     ?~ genS3Url templateBucketName stackTemplateId
+performCreateStack :: AWSConstraint' m => Stack -> m StackId
+performCreateStack T.Stack{..} = handleResp =<< send . createReq =<< asks T.templateBucketName
+  where
+    createReq templateBucketName =
+      createStack (deplEnv <> "-" <> stackName)
+        & csCapabilities    .~ [CapabilityNamedIAM]
+        & csDisableRollback ?~ True
+        & csParameters      .~ fmap (translateParam templateBucketName) stackParams
+        & csTemplateURL     ?~ genS3Url templateBucketName stackTemplateId
+
+    handleResp resp =
+      let rcode = (view csrsResponseStatus) resp
+      in
+        if rcode == 200
+        then maybe
+          (throwM $ CreateStackError "Received invalid response")
+          (pure . StackId)
+          (view csrsStackId $ resp)
+        else
+          throwM $ CreateStackError ("Received http status " <> show rcode)
 
 uploadTemplate :: AWSConstraint' m => TemplateId -> m ()
 uploadTemplate tid = do
+    liftIO $ putStr $ show (unTemplateId tid) <> "... "
     templateDir <- asks T.templateDir
     templateBucketName <- asks T.templateBucketName
     body <- readBody templateDir tid
@@ -64,21 +86,26 @@ uploadTemplate tid = do
       (BucketName templateBucketName)
       (ObjectKey $ unTemplateId tid)
       body
-    liftIO $ putStrLn $ "Uploaded template " <> show (unTemplateId tid)
+    liftIO $ putStrLn $ "DONE"
   where
     readBody templateDir
       = liftM (toBody . toHashed)
       . (=<<) (liftIO . readFile . toFilePath)
       . genLocalPath templateDir
 
+findStack :: MonadThrow m => Text -> [Stack] -> m Stack
+findStack stackName = maybe (throwM $ err) pure . find ((== stackName) . T.stackName)
+  where
+    err = StackNotFoundError $ "Unable to find Stack " <> unpack stackName <> "."
+
 listTemplateIds :: Stack -> [TemplateId]
 listTemplateIds T.Stack{..} = stackTemplateId : mapMaybe extract stackParams
   where
-    extract (Param _ (PTemplateId tid)) = pure tid
+    extract (T.Param _ (PTemplateId tid)) = pure tid
     extract _                           = Nothing
 
 translateParam :: Text -> Param -> Parameter
-translateParam templateBucketName (Param pname pvalue) =
+translateParam templateBucketName (T.Param pname pvalue) =
     parameter
       & pParameterKey   ?~ pname
       & pParameterValue ?~ evalParamExpr pvalue
@@ -96,10 +123,3 @@ genS3Url templateBucketName tid = fold
   , ".s3.eu-central-1.amazonaws.com/"
   , unTemplateId tid
   ]
-    
-{-
-listFilesRel :: MonadIO m => Path b Dir -> Stream (Of (Path Rel File)) m ()
-listFilesRel dir = do
-  (dirs, files) <- listDirRel dir
-  S.each files <> foldMap (listFilesRel . (dir </>)) dirs
--}
