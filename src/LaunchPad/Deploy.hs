@@ -27,7 +27,6 @@ import Data.Maybe                 (mapMaybe)
 import Data.Text                  (Text, unpack)
 import Data.Text.IO               (putStr, putStrLn)
 
-import LaunchPad.Error
 import LaunchPad.Type
 
 import Network.AWS.CloudFormation hiding (Stack)
@@ -59,7 +58,7 @@ deployStack stackName = do
   performCreateStack stack
 
 performCreateStack :: AWSConstraint' m => Stack -> m StackId
-performCreateStack Stack{..} = handleResp =<< handleServiceError . send . createReq =<< asks _templateBucketName
+performCreateStack Stack{..} = handleResp =<< send . createReq =<< asks _templateBucketName
   where
     createReq templateBucketName =
       createStack (_deplEnv <> "-" <> _stackName)

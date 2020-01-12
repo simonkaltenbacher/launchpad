@@ -4,7 +4,7 @@ cabal-version: 1.12
 --
 -- see: https://github.com/sol/hpack
 --
--- hash: e89bf7e4e8dcb486764bd848d715b6a1f9ea4b609bb54866f3083eee23f2678d
+-- hash: 3f0335f165fc683c1cb156992ed9daf34847b28438e8feba4586b3a2b320d541
 
 name:           launchpad
 version:        0.1.0.0
@@ -25,7 +25,6 @@ source-repository head
 library
   exposed-modules:
       LaunchPad.Deploy
-      LaunchPad.Error
       LaunchPad.Type
       LaunchPad.Type.Dhall
   other-modules:
