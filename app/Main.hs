@@ -12,14 +12,13 @@ import           Data.Bifunctor             (first)
 import           Data.Functor               ((<&>))
 import           Data.Text                  (Text)
 import           Data.Text.IO               (putStrLn)
+import qualified Data.Text as T
 
 import           Dhall
 
 import           LaunchPad.Deploy
-import           LaunchPad.Type             (Config)
-import qualified LaunchPad.Type as T
-import           LaunchPad.Type.Dhall       (DhallConfig)
-import qualified LaunchPad.Type.Dhall as TD
+import           LaunchPad.Type
+import           LaunchPad.Type.Dhall
 
 import           Options.Applicative
 
@@ -56,10 +55,13 @@ templateDirArg = argument (eitherReader $ first show . parseAbsDir) (metavar "TE
 readConfig :: Path Abs Dir -> Path Abs File -> IO Config
 readConfig templateDir confFile = do
   env <- newEnv Discover <&> envRegion .~ Frankfurt
-  TD.DhallConfig {..} <- readDhallConfig confFile
-  return T.Config {..}
+  DhallConfig {..} <- readDhallConfig confFile
+  return Config { _templateDir = templateDir, _env = env, .. }
 
 readDhallConfig :: Path Abs File -> IO DhallConfig
 readDhallConfig = inputFile (autoWith interpretOptions) . toFilePath
   where
-    interpretOptions = defaultInterpretOptions { singletonConstructors = Bare }
+    interpretOptions = defaultInterpretOptions
+      { fieldModifier = T.dropWhile (== '_')
+      , singletonConstructors = Bare
+      }

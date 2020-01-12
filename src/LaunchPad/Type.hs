@@ -25,28 +25,28 @@ import Path
 import TextShow                (TextShow (..))
 
 data Config = Config
-  { env                :: Env
-  , templateBucketName :: Text
-  , templateDir        :: Path Abs Dir
-  , stacks             :: [Stack]
+  { _env                :: Env
+  , _templateBucketName :: Text
+  , _templateDir        :: Path Abs Dir
+  , _stacks             :: [Stack]
   }
 
 instance HasEnv Config where
-  environment = lens env (\conf env -> conf {env = env})
+  environment = lens _env (\conf env -> conf {_env = env})
 
 data Stack = Stack
-  { deplEnv         :: Text
-  , stackName       :: Text
-  , stackTemplateId :: TemplateId
-  , stackParams     :: [Param]
+  { _deplEnv         :: Text
+  , _stackName       :: Text
+  , _stackTemplateId :: TemplateId
+  , _stackParams     :: [Param]
   }
   deriving (Eq, Generic)
 
 instance FromDhall Stack
 
 data Param = Param
-  { paramName  :: Text
-  , paramValue :: PExpr
+  { _paramName  :: Text
+  , _paramValue :: PExpr
   }
   deriving (Eq, Generic)
 

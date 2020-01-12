@@ -11,8 +11,8 @@ import Dhall
 import GHC.Generics   (Generic)
 
 data DhallConfig = DhallConfig
-  { templateBucketName :: Text
-  , stacks             :: [Stack]
+  { _templateBucketName :: Text
+  , _stacks             :: [Stack]
   }
   deriving (Eq, Generic)
 
