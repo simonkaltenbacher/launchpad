@@ -12,6 +12,7 @@ description:         Please see the README on GitHub at <https://github.com/simo
 
 dependencies:
 - amazonka
+- amazonka-core
 - amazonka-cloudformation
 - amazonka-s3
 - base >= 4.7 && < 5

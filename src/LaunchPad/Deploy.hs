@@ -27,6 +27,7 @@ import           Data.Maybe                 (mapMaybe)
 import           Data.Text                  (Text, unpack)
 import           Data.Text.IO               (putStr, putStrLn)
 
+import           LaunchPad.Error
 import           LaunchPad.Type             (Config, Param, PExpr (..), Stack, StackId (..), TemplateId (..))
 import qualified LaunchPad.Type as T
 
@@ -37,7 +38,7 @@ import           Path
 
 import           Prelude                    hiding (putStr, putStrLn, readFile)
 
-import           TextShow                   (printT, printTL, showt)
+import           TextShow                   (showt)
 
 
 type AWSConstraint' m = (MonadThrow m, MonadCatch m, MonadResource m, MonadReader Config m)
@@ -56,10 +57,12 @@ deployStack stackName = do
   stack <- findStack stackName =<< asks T.stacks
   liftIO $ putStrLn $ "Uploading templates"
   mapM_ uploadTemplate (listTemplateIds stack)
+  templateBucketName <- asks T.templateBucketName
+  liftIO $ putStrLn $ "Deploying stack " <> stackName <> " to bucket " <> templateBucketName
   performCreateStack stack
 
 performCreateStack :: AWSConstraint' m => Stack -> m StackId
-performCreateStack T.Stack{..} = handleResp =<< send . createReq =<< asks T.templateBucketName
+performCreateStack T.Stack{..} = handleResp =<< handleServiceError . send . createReq =<< asks T.templateBucketName
   where
     createReq templateBucketName =
       createStack (deplEnv <> "-" <> stackName)
@@ -68,16 +71,9 @@ performCreateStack T.Stack{..} = handleResp =<< send . createReq =<< asks T.temp
         & csParameters      .~ fmap (translateParam templateBucketName) stackParams
         & csTemplateURL     ?~ genS3Url templateBucketName stackTemplateId
 
-    handleResp resp =
-      let rcode = (view csrsResponseStatus) resp
-      in
-        if rcode == 200
-        then maybe
-          (throwM $ CreateStackError "Received invalid response")
-          (pure . StackId)
-          (view csrsStackId $ resp)
-        else
-          throwM $ CreateStackError ("Received http status " <> showt rcode)
+    handleResp
+      = maybe (throwM $ CreateStackError "Received invalid response") (pure . StackId)
+      . view csrsStackId
 
 uploadTemplate :: AWSConstraint' m => TemplateId -> m ()
 uploadTemplate tid = do
