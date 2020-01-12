@@ -74,7 +74,6 @@ instance Exception ServiceError
 reportError :: IO () -> IO ()
 reportError = handleAll reportOther . handling _ServiceError reportServiceError
   where
-    reportServiceError :: ServiceError -> IO ()
     reportServiceError error = putStrLn $
            "ERROR "
         <> "ServiceError "
