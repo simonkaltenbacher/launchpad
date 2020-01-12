@@ -69,8 +69,6 @@ readDhallConfig = inputFile (autoWith interpretOptions) . toFilePath
       , singletonConstructors = Bare
       }
 
-instance Exception ServiceError
-
 reportError :: IO () -> IO ()
 reportError = handleAll reportOther . handling _ServiceError reportServiceError
   where
