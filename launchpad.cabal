@@ -4,7 +4,7 @@ cabal-version: 1.12
 --
 -- see: https://github.com/sol/hpack
 --
--- hash: 6b90680679d53318cc3f607775d948ecdc02699bd884a701500769f214bd7f53
+-- hash: e89bf7e4e8dcb486764bd848d715b6a1f9ea4b609bb54866f3083eee23f2678d
 
 name:           launchpad
 version:        0.1.0.0
@@ -48,7 +48,6 @@ library
     , path
     , path-io
     , text
-    , text-show
     , transformers
   default-language: Haskell2010
 
@@ -76,7 +75,6 @@ executable launchpad
     , path
     , path-io
     , text
-    , text-show
     , transformers
   default-language: Haskell2010
 
@@ -105,6 +103,5 @@ test-suite launchpad-test
     , path
     , path-io
     , text
-    , text-show
     , transformers
   default-language: Haskell2010

@@ -26,7 +26,6 @@ dependencies:
 - path
 - path-io
 - text
-- text-show
 - transformers
 
 library:

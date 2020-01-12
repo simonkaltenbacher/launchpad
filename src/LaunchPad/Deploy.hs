@@ -37,8 +37,6 @@ import Path
 
 import Prelude                    hiding (putStr, putStrLn, readFile)
 
-import TextShow                   (showt)
-
 
 type AWSConstraint' m = (MonadThrow m, MonadCatch m, MonadResource m, MonadReader Config m)
 
@@ -57,7 +55,7 @@ deployStack stackName = do
   liftIO $ putStrLn $ "Uploading templates"
   mapM_ uploadTemplate (listTemplateIds stack)
   templateBucketName <- asks _templateBucketName
-  liftIO $ putStrLn $ "Deploying stack " <> stackName <> " to bucket " <> templateBucketName
+  liftIO $ putStrLn $ "Deploying stack " <> stackName <> " to deployment environment " <> _deplEnv stack
   performCreateStack stack
 
 performCreateStack :: AWSConstraint' m => Stack -> m StackId
@@ -76,7 +74,7 @@ performCreateStack Stack{..} = handleResp =<< handleServiceError . send . create
 
 uploadTemplate :: AWSConstraint' m => TemplateId -> m ()
 uploadTemplate tid = do
-    liftIO $ putStr $ showt tid <> "... "
+    liftIO $ putStr $ unTemplateId tid <> "... "
     templateDir <- asks _templateDir
     templateBucketName <- asks _templateBucketName
     body <- readBody templateDir tid

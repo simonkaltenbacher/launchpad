@@ -22,8 +22,6 @@ import GHC.Generics            (Generic)
 
 import Path
 
-import TextShow                (TextShow (..))
-
 data Config = Config
   { _env                :: Env
   , _templateBucketName :: Text
@@ -40,7 +38,7 @@ data Stack = Stack
   , _stackTemplateId :: TemplateId
   , _stackParams     :: [Param]
   }
-  deriving (Eq, Generic)
+  deriving (Eq, Generic, Show)
 
 instance FromDhall Stack
 
@@ -48,27 +46,21 @@ data Param = Param
   { _paramName  :: Text
   , _paramValue :: PExpr
   }
-  deriving (Eq, Generic)
+  deriving (Eq, Generic, Show)
 
 instance FromDhall Param
 
 data PExpr
   = PLit Text
   | PTemplateId TemplateId
-  deriving (Eq, Generic)
+  deriving (Eq, Generic, Show)
 
 instance FromDhall PExpr
 
 newtype TemplateId = TemplateId { unTemplateId :: Text }
-  deriving (Eq, Generic)
+  deriving (Eq, Generic, Show)
 
 instance FromDhall TemplateId
 
-instance TextShow TemplateId where
-  showb = showb . unTemplateId
-
 newtype StackId = StackId { unStackId :: Text }
-  deriving (Eq, Generic)
-
-instance TextShow StackId where
-  showb = showb . unStackId
+  deriving (Eq, Generic, Show)
