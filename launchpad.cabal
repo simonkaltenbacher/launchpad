@@ -4,10 +4,10 @@ cabal-version: 1.12
 --
 -- see: https://github.com/sol/hpack
 --
--- hash: 63b459b2b037f76d5f545889b2df3037598e2827ea9e33a62894bab0034a4589
+-- hash: 9b24209f88c29688955649a8083e422f93f3199d3b63501a6f50302129ad19ee
 
 name:           launchpad
-version:        0.1.0.0
+version:        0.1.0
 description:    Please see the README on GitHub at <https://github.com/simonkaltenbacher/launchpad#readme>
 homepage:       https://github.com/simonkaltenbacher/launchpad#readme
 bug-reports:    https://github.com/simonkaltenbacher/launchpad/issues

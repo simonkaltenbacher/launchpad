@@ -5,12 +5,12 @@ module Main where
 
 import           Conduit
 
-import           Control.Exception          (Exception, SomeException (..))
+import           Control.Exception          (Exception, handle, IOException)
 import           Control.Exception.Lens     (handling)
 import           Control.Lens.Getter        (view)
 import           Control.Lens.Setter        ((.~))
 import           Control.Monad              ((=<<), join)
-import           Control.Monad.Catch        (handleAll, MonadCatch)
+import           Control.Monad.Catch        (handleJust, MonadCatch)
 import           Control.Monad.IO.Class
 import           Control.Monad.Trans.AWS
 import           Control.Monad.Trans.Reader
@@ -35,13 +35,28 @@ import           Path
 
 import           Prelude                    hiding (putStrLn)
 
-main :: IO ()
-main = reportError . join $ execParser (info (opts <**> helper) idm)
+import           System.Exit
 
-opts :: Parser (IO ())
-opts = subparser $ command "deploy" (info parser $ progDesc "")
+main :: IO ()
+main = reportError . join . execParser $ info parser infoMods
   where
-    parser = run <$> confFileOpt <*> stackNameArg <*> templateDirArg <**> helper
+    infoMods = fullDesc <> header "launchpad 0.1.0 - Automate deployment of nested stacks"
+
+parser :: Parser (IO ())
+parser = subparser deployCmd <**> helper
+
+deployCmd :: Mod CommandFields (IO ())
+deployCmd = command "deploy" $ info parser infoMods
+  where
+    parser = run
+      <$>  confFileOpt
+      <*>  stackNameArg
+      <*>  templateDirArg
+      <**> helper
+
+    infoMods = progDesc $ "Deploy given stack with name STACK_NAME "
+      <> "as specified in CONF_FILE. Template identifiers are resolved "
+      <> "within the given directory TEMPLATE_DIR."
 
     run confFile stackName templateDir = do
       conf <- readConfig templateDir confFile
@@ -52,15 +67,20 @@ opts = subparser $ command "deploy" (info parser $ progDesc "")
 
 confFileOpt :: Parser (Path Abs File)
 confFileOpt = option (eitherReader $ first show . parseAbsFile) $
-     short 'c'
-  <> long "conf"
+     short   'c'
+  <> long    "conf"
   <> metavar "CONF_FILE"
+  <> help    "Dhall configuration file containing the deployment configuration for each stack"
 
 stackNameArg :: Parser Text
-stackNameArg = strArgument (metavar "STACK_NAME")
+stackNameArg = strArgument $
+     metavar "STACK_NAME"
+  <> help    "Name of the stack to be deployed"
 
 templateDirArg :: Parser (Path Abs Dir)
-templateDirArg = argument (eitherReader $ first show . parseAbsDir) (metavar "TEMPLATE_DIR")
+templateDirArg = argument (eitherReader $ first show . parseAbsDir) $
+     metavar "TEMPLATE_DIR"
+  <> help    "Directory where template files are located"  
 
 readConfig :: Path Abs Dir -> Path Abs File -> IO Config
 readConfig templateDir confFile = do
@@ -77,7 +97,10 @@ readDhallConfig = inputFile (autoWith interpretOptions) . toFilePath
       }
 
 reportError :: IO () -> IO ()
-reportError = handleAll reportOther . handling _ServiceError reportServiceError
+reportError
+    = handle reportIOError
+    . handle reportAWSError
+    . handling _ServiceError reportServiceError
   where
     reportServiceError error = putStrLn $
            "ERROR "
@@ -89,4 +112,11 @@ reportError = handleAll reportOther . handling _ServiceError reportServiceError
         extractErrorCode = (\(ErrorCode c) -> c) . view serviceCode
         extractErrorMessage = foldMap (\(ErrorMessage m) -> m) . view serviceMessage
 
-    reportOther = putStrLn . ("ERROR " <>) . pack . show
+    reportIOError :: IOException -> IO ()
+    reportIOError = reportError
+
+    reportAWSError :: Error -> IO ()
+    reportAWSError = reportError
+
+    reportError :: Show e => e -> IO ()
+    reportError = putStrLn . ("ERROR " <>) . pack . show
