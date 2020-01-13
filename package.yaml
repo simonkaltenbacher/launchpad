@@ -15,11 +15,14 @@ dependencies:
 - amazonka-core
 - amazonka-cloudformation
 - amazonka-s3
+- ansi-terminal
 - base >= 4.7 && < 5
 - bytestring
 - conduit
+- clock
 - dhall
 - exceptions
+- formatting
 - lens
 - mtl
 - optparse-applicative

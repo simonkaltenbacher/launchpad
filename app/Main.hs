@@ -3,12 +3,15 @@
 
 module Main where
 
+import           Conduit
+
 import           Control.Exception          (Exception, SomeException (..))
 import           Control.Exception.Lens     (handling)
 import           Control.Lens.Getter        (view)
 import           Control.Lens.Setter        ((.~))
 import           Control.Monad              ((=<<), join)
 import           Control.Monad.Catch        (handleAll, MonadCatch)
+import           Control.Monad.IO.Class
 import           Control.Monad.Trans.AWS
 import           Control.Monad.Trans.Reader
 
@@ -16,7 +19,6 @@ import           Data.Bifunctor             (first)
 import           Data.Functor               ((<&>))
 import           Data.Text                  (pack, Text)
 import           Data.Text.IO               (putStrLn)
-import           Data.Text.Lazy.Builder
 import qualified Data.Text as T
 
 import           Dhall
@@ -25,12 +27,13 @@ import           LaunchPad.Deploy
 import           LaunchPad.Type
 import           LaunchPad.Type.Dhall
 
+import           Network.AWS.CloudFormation (StackStatus (..))
+
 import           Options.Applicative
 
 import           Path
 
 import           Prelude                    hiding (putStrLn)
-
 
 main :: IO ()
 main = reportError . join $ execParser opts
@@ -40,8 +43,10 @@ opts = info (run <$> confFileOpt <*> stackNameArg <*> templateDirArg <**> helper
   where
     run confFile stackName templateDir = do
       conf <- readConfig templateDir confFile
-      stackId <- (runResourceT . runAWST conf . deployStack) stackName
-      putStrLn $ "Stack " <> unStackId stackId
+      runResourceT . runAWST conf $ do
+        stackId <- deployStack stackName
+        liftIO $ putStrLn $ "Tracking status of stack " <> unStackId stackId
+        trackStackStatus stackId
 
 confFileOpt :: Parser (Path Abs File)
 confFileOpt = option (eitherReader $ first show . parseAbsFile) $
