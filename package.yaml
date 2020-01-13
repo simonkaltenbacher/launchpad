@@ -1,6 +1,7 @@
 name:                launchpad
 version:             0.1.0
 github:              "simonkaltenbacher/launchpad"
+license:             BSD3
 author:              "Simon Kaltenbacher"
 maintainer:          "simonkaltenbacher@gmail.com"
 copyright:           "2020 Simon Kaltenbacher"
