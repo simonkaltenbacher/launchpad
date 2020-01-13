@@ -36,11 +36,13 @@ import           Path
 import           Prelude                    hiding (putStrLn)
 
 main :: IO ()
-main = reportError . join $ execParser opts
+main = reportError . join $ execParser (info opts idm)
 
-opts :: ParserInfo (IO ())
-opts = info (run <$> confFileOpt <*> stackNameArg <*> templateDirArg <**> helper) idm
+opts :: Parser (IO ())
+opts = subparser $ command "deploy" (info parser $ progDesc "")
   where
+    parser = run <$> confFileOpt <*> stackNameArg <*> templateDirArg <**> helper
+    
     run confFile stackName templateDir = do
       conf <- readConfig templateDir confFile
       runResourceT . runAWST conf $ do
