@@ -15,7 +15,6 @@ import           Control.Monad.IO.Class
 import           Control.Monad.Trans.AWS
 import           Control.Monad.Trans.Reader
 
-import           Data.Bifunctor             (first)
 import           Data.Functor               ((<&>))
 import           Data.Text                  (pack, Text)
 import           Data.Text.IO               (putStrLn)
@@ -32,6 +31,7 @@ import           Network.AWS.CloudFormation (StackStatus (..))
 import           Options.Applicative
 
 import           Path
+import           Path.IO
 
 import           Prelude                    hiding (putStrLn)
 
@@ -40,7 +40,7 @@ import           System.Exit
 main :: IO ()
 main = reportError . join . execParser $ info parser infoMods
   where
-    infoMods = fullDesc <> header "launchpad 0.1.0 - Automate deployment of nested stacks"
+    infoMods = fullDesc <> header "launchpad 0.1.1 - Automate deployment of nested stacks"
 
 parser :: Parser (IO ())
 parser = subparser deployCmd <**> helper
@@ -59,14 +59,14 @@ deployCmd = command "deploy" $ info parser infoMods
       <> "within the given directory TEMPLATE_DIR."
 
     run confFile stackName templateDir = do
-      conf <- readConfig templateDir confFile
+      conf <- join $ readConfig <$> resolveDir' templateDir <*> resolveFile' confFile
       runResourceT . runAWST conf $ do
         stackId <- deployStack stackName
         liftIO $ putStrLn $ "Tracking status of stack " <> unStackId stackId
         trackStackStatus stackId
 
-confFileOpt :: Parser (Path Abs File)
-confFileOpt = option (eitherReader $ first show . parseAbsFile) $
+confFileOpt :: Parser FilePath
+confFileOpt = strOption $
      short   'c'
   <> long    "conf"
   <> metavar "CONF_FILE"
@@ -77,8 +77,8 @@ stackNameArg = strArgument $
      metavar "STACK_NAME"
   <> help    "Name of the stack to be deployed"
 
-templateDirArg :: Parser (Path Abs Dir)
-templateDirArg = argument (eitherReader $ first show . parseAbsDir) $
+templateDirArg :: Parser FilePath
+templateDirArg = strArgument $
      metavar "TEMPLATE_DIR"
   <> help    "Directory where template files are located"  
 
