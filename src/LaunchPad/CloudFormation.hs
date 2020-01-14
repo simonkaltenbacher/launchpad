@@ -106,14 +106,17 @@ uploadTemplate tid = do
       . (=<<) (liftIO . readFile . toFilePath)
       . genLocalPath templateDir
 
-getStackStatus :: AWSConstraint' m => StackId -> m CF.StackStatus
-getStackStatus = (=<<) handleResp . send . createReq
+describeStack :: AWSConstraint' m => StackId -> m CF.Stack
+describeStack = (=<<) handleResp . send . createReq
   where
     createReq = flip (CF.dStackName ?~) CF.describeStacks . unStackId
- 
+
     handleResp
       = maybe (throwM $ InvalidStackStatusError "Invalid stack status") pure
-      . (^? CF.dsrsStacks . ix 0 . CF.sStackStatus)
+      . (^? CF.dsrsStacks . ix 0)
+
+getStackStatus :: AWSConstraint' m => StackId -> m CF.StackStatus
+getStackStatus = fmap (view CF.sStackStatus) . describeStack
 
 trackStackStatus :: AWSConstraint' m => StackId -> m ()
 trackStackStatus stackId = do
