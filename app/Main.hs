@@ -22,11 +22,9 @@ import qualified Data.Text as T
 
 import           Dhall
 
-import           LaunchPad.Deploy
+import           LaunchPad.CloudFormation
 import           LaunchPad.Type
 import           LaunchPad.Type.Dhall
-
-import           Network.AWS.CloudFormation (StackStatus (..))
 
 import           Options.Applicative
 

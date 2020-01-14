@@ -4,50 +4,50 @@
 {-# LANGUAGE QuasiQuotes       #-}
 {-# LANGUAGE RecordWildCards   #-}
 
-module LaunchPad.Deploy
+module LaunchPad.CloudFormation
   ( deployStack
   , getStackStatus
   , trackStackStatus
   )
   where
 
-import Conduit                    (MonadResource)
+import           Conduit                         (MonadResource)
 
-import Control.Concurrent
-import Control.Concurrent.MVar
-import Control.Exception          (Exception)
-import Control.Lens               ((^?), ix, view)
-import Control.Lens.Setter        ((.~), (?~))
-import Control.Monad              (liftM, void)
-import Control.Monad.Catch        (MonadCatch, MonadThrow, throwM)
-import Control.Monad.IO.Class
-import Control.Monad.Reader
-import Control.Monad.Trans.AWS
+import           Control.Concurrent
+import           Control.Concurrent.MVar
+import           Control.Exception               (Exception)
+import           Control.Lens                    ((^?), ix, view)
+import           Control.Lens.Setter             ((.~), (?~))
+import           Control.Monad                   (liftM, void)
+import           Control.Monad.Catch             (MonadCatch, MonadThrow, throwM)
+import           Control.Monad.IO.Class
+import           Control.Monad.Reader
+import           Control.Monad.Trans.AWS
 
-import Data.ByteString            (readFile)
-import Data.Foldable              (find, fold)
-import Data.Function              ((&))
-import Data.List                  (intersperse)
-import Data.Maybe                 (fromMaybe, mapMaybe)
-import Data.Text                  (pack, Text, unpack)
-import Data.Text.IO               (putStr, putStrLn)
+import           Data.ByteString                  (readFile)
+import           Data.Foldable                    (find, fold)
+import           Data.Function                    ((&))
+import           Data.List                        (intersperse)
+import           Data.Maybe                       (fromMaybe, mapMaybe)
+import           Data.Text                        (pack, Text, unpack)
+import           Data.Text.IO                     (putStr, putStrLn)
 
-import Formatting
-import Formatting.Clock           (timeSpecs)
+import           Formatting
+import           Formatting.Clock                 (timeSpecs)
 
-import LaunchPad.Type
+import           LaunchPad.Type
 
-import Network.AWS.CloudFormation hiding (Stack)
-import Network.AWS.Data           (toText)
-import Network.AWS.S3
+import qualified Network.AWS.CloudFormation as CF
+import           Network.AWS.Data                 (toText)
+import qualified Network.AWS.S3 as S3
 
-import Path
+import           Path
 
-import Prelude                    hiding (putStr, putStrLn, readFile)
+import           Prelude                          hiding (putStr, putStrLn, readFile)
 
-import System.Clock
-import System.Console.ANSI        (setCursorColumn)
-import System.IO                  (hFlush, stdout)
+import           System.Clock
+import           System.Console.ANSI              (setCursorColumn)
+import           System.IO                        (hFlush, stdout)
 
 
 type AWSConstraint' m = (MonadThrow m, MonadCatch m, MonadResource m, MonadReader Config m)
@@ -72,21 +72,21 @@ deployStack stackName = do
   mapM_ uploadTemplate (listTemplateIds stack)
   templateBucketName <- asks _templateBucketName
   liftIO $ putStrLn $ "Deploying stack " <> stackName <> " to deployment environment " <> _deplEnv stack
-  performCreateStack stack
+  createStack stack
 
-performCreateStack :: AWSConstraint' m => Stack -> m StackId
-performCreateStack Stack{..} = handleResp =<< send . createReq =<< asks _templateBucketName
+createStack :: AWSConstraint' m => Stack -> m StackId
+createStack Stack{..} = handleResp =<< send . createReq =<< asks _templateBucketName
   where
     createReq templateBucketName =
-      createStack (_deplEnv <> "-" <> _stackName)
-        & csCapabilities    .~ [CapabilityNamedIAM]
-        & csDisableRollback ?~ True
-        & csParameters      .~ fmap (translateParam templateBucketName) _stackParams
-        & csTemplateURL     ?~ genS3Url templateBucketName _stackTemplateId
+      CF.createStack (_deplEnv <> "-" <> _stackName)
+        & CF.csCapabilities    .~ [CF.CapabilityNamedIAM]
+        & CF.csDisableRollback ?~ True
+        & CF.csParameters      .~ fmap (translateParam templateBucketName) _stackParams
+        & CF.csTemplateURL     ?~ genS3Url templateBucketName _stackTemplateId
 
     handleResp
       = maybe (throwM $ CreateStackError "Received invalid response") (pure . StackId)
-      . view csrsStackId
+      . view CF.csrsStackId
 
 uploadTemplate :: AWSConstraint' m => TemplateId -> m ()
 uploadTemplate tid = do
@@ -95,9 +95,9 @@ uploadTemplate tid = do
     templateDir <- asks _templateDir
     templateBucketName <- asks _templateBucketName
     body <- readBody templateDir tid
-    send $ putObject
-      (BucketName templateBucketName)
-      (ObjectKey $ unTemplateId tid)
+    send $ S3.putObject
+      (S3.BucketName templateBucketName)
+      (S3.ObjectKey $ unTemplateId tid)
       body
     liftIO $ putStrLn $ "DONE"
   where
@@ -106,14 +106,14 @@ uploadTemplate tid = do
       . (=<<) (liftIO . readFile . toFilePath)
       . genLocalPath templateDir
 
-getStackStatus :: AWSConstraint' m => StackId -> m StackStatus
+getStackStatus :: AWSConstraint' m => StackId -> m CF.StackStatus
 getStackStatus = (=<<) handleResp . send . createReq
   where
-    createReq = flip (dStackName ?~) describeStacks . unStackId
+    createReq = flip (CF.dStackName ?~) CF.describeStacks . unStackId
  
     handleResp
       = maybe (throwM $ InvalidStackStatusError "Invalid stack status") pure
-      . (^? dsrsStacks . ix 0 . sStackStatus)
+      . (^? CF.dsrsStacks . ix 0 . CF.sStackStatus)
 
 trackStackStatus :: AWSConstraint' m => StackId -> m ()
 trackStackStatus stackId = do
@@ -124,7 +124,7 @@ trackStackStatus stackId = do
   liftIO . void . forkIO $ runResourceT . runAWST conf $ pollStackStatus stackId stackStatusVar
   reportStatus start stackStatus stackStatusVar
 
-pollStackStatus :: AWSConstraint' m => StackId -> MVar StackStatus -> m ()
+pollStackStatus :: AWSConstraint' m => StackId -> MVar CF.StackStatus -> m ()
 pollStackStatus stackId stackStatusVar = loop
   where
     loop = do
@@ -133,7 +133,7 @@ pollStackStatus stackId stackStatusVar = loop
       liftIO $ putMVar stackStatusVar stackStatus
       when (isInProgress stackStatus) loop
 
-reportStatus :: MonadIO m => TimeSpec -> StackStatus -> MVar StackStatus -> m ()
+reportStatus :: MonadIO m => TimeSpec -> CF.StackStatus -> MVar CF.StackStatus -> m ()
 reportStatus start stackStatus stackStatusVar = liftIO $ loop stackStatus
   where
     loop stackStatus = do
@@ -150,11 +150,11 @@ reportStatus start stackStatus stackStatusVar = liftIO $ loop stackStatus
 nSecondDelay :: MonadIO m => Int -> m ()
 nSecondDelay n = liftIO $ threadDelay (n * 1000000)
 
-isInProgress :: StackStatus -> Bool
-isInProgress SSCreateInProgress                = True
-isInProgress SSUpdateInProgress                = True
-isInProgress SSUpdateCompleteCleanupInProgress = True
-isInProgress _                                 = False
+isInProgress :: CF.StackStatus -> Bool
+isInProgress CF.SSCreateInProgress                = True
+isInProgress CF.SSUpdateInProgress                = True
+isInProgress CF.SSUpdateCompleteCleanupInProgress = True
+isInProgress _                                    = False
 
 findStack :: MonadThrow m => Text -> [Stack] -> m Stack
 findStack stackName = maybe (throwM $ err) pure . find ((== stackName) . _stackName)
@@ -167,11 +167,11 @@ listTemplateIds Stack{..} = _stackTemplateId : mapMaybe extract _stackParams
     extract (Param _ (PTemplateId tid)) = pure tid
     extract _                           = Nothing
 
-translateParam :: Text -> Param -> Parameter
+translateParam :: Text -> Param -> CF.Parameter
 translateParam templateBucketName (Param pname pvalue) =
-    parameter
-      & pParameterKey   ?~ pname
-      & pParameterValue ?~ evalParamExpr pvalue
+    CF.parameter
+      & CF.pParameterKey   ?~ pname
+      & CF.pParameterValue ?~ evalParamExpr pvalue
   where
     evalParamExpr (PLit value)      = value
     evalParamExpr (PTemplateId tid) = genS3Url templateBucketName tid
