@@ -48,6 +48,7 @@ deployCmd = command "deploy" $ info parser infoMods
   where
     parser = run
       <$>  confFileOpt
+      <*>  disableRollbackSwitch
       <*>  stackNameArg
       <*>  templateDirArg
       <**> helper
@@ -56,10 +57,10 @@ deployCmd = command "deploy" $ info parser infoMods
       <> "as specified in CONF_FILE. Template identifiers are resolved "
       <> "within the given directory TEMPLATE_DIR."
 
-    run confFile stackName templateDir = do
+    run confFile disableRollback stackName templateDir = do
       conf <- join $ readConfig <$> resolveDir' templateDir <*> resolveFile' confFile
       runResourceT . runAWST conf $ do
-        stackId <- deployStack stackName
+        stackId <- deployStack disableRollback stackName
         liftIO $ putStrLn $ "Tracking status of stack " <> unStackId stackId
         trackStackStatus stackId
 
@@ -69,6 +70,11 @@ confFileOpt = strOption $
   <> long    "conf"
   <> metavar "CONF_FILE"
   <> help    "Dhall configuration file containing the deployment configuration for each stack"
+
+disableRollbackSwitch :: Parser Bool
+disableRollbackSwitch = switch $
+     long "disable-rollback"
+  <> help "Disable rollback of stack if stack creation fails"
 
 stackNameArg :: Parser Text
 stackNameArg = strArgument $

@@ -65,22 +65,22 @@ instance Exception StackNotFoundError
 instance Exception CreateStackError
 instance Exception InvalidStackStatusError
 
-deployStack :: AWSConstraint' m => Text -> m StackId
-deployStack stackName = do
+deployStack :: AWSConstraint' m => Bool -> Text -> m StackId
+deployStack disableRollback stackName = do
   stack <- findStack stackName =<< asks _stacks
   liftIO $ putStrLn $ "Uploading templates"
   mapM_ uploadTemplate (listTemplateIds stack)
   templateBucketName <- asks _templateBucketName
   liftIO $ putStrLn $ "Deploying stack " <> stackName <> " to deployment environment " <> _deplEnv stack
-  createStack stack
+  createStack disableRollback stack
 
-createStack :: AWSConstraint' m => Stack -> m StackId
-createStack Stack{..} = handleResp =<< send . createReq =<< asks _templateBucketName
+createStack :: AWSConstraint' m => Bool -> Stack -> m StackId
+createStack disableRollback Stack{..} = handleResp =<< send . createReq =<< asks _templateBucketName
   where
     createReq templateBucketName =
       CF.createStack (_deplEnv <> "-" <> _stackName)
         & CF.csCapabilities    .~ [CF.CapabilityNamedIAM]
-        & CF.csDisableRollback ?~ True
+        & CF.csDisableRollback ?~ disableRollback
         & CF.csParameters      .~ fmap (translateParam templateBucketName) _stackParams
         & CF.csTemplateURL     ?~ genS3Url templateBucketName _stackTemplateId
 
