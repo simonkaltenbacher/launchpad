@@ -5,35 +5,25 @@ module Main where
 
 import           Conduit
 
-import           Control.Exception          (Exception, handle, IOException)
-import           Control.Exception.Lens     (handling)
-import           Control.Lens.Getter        (view)
-import           Control.Lens.Setter        ((.~))
-import           Control.Monad              ((=<<), join)
-import           Control.Monad.Catch        (handleJust, MonadCatch)
-import           Control.Monad.IO.Class
+import           Control.Exception        (handle, IOException)
+import           Control.Exception.Lens   (handling)
+import           Control.Lens.Getter      (view)
+import           Control.Monad            ((=<<), join)
+import           Control.Monad.Reader
 import           Control.Monad.Trans.AWS
-import           Control.Monad.Trans.Reader
 
-import           Data.Functor               ((<&>))
-import           Data.Text                  (pack, Text)
-import           Data.Text.IO               (putStrLn)
-import qualified Data.Text as T
-
-import           Dhall
+import           Data.Text                (pack)
 
 import           LaunchPad.CloudFormation
-import           LaunchPad.Type
-import           LaunchPad.Type.Dhall
+import           LaunchPad.Config
 
 import           Options.Applicative
 
-import           Path
 import           Path.IO
 
-import           Prelude                    hiding (putStrLn)
+import           Relude
 
-import           System.Exit
+
 
 main :: IO ()
 main = reportError . join . execParser $ info parser infoMods
@@ -60,9 +50,10 @@ deployCmd = command "deploy" $ info parser infoMods
     run confFile disableRollback stackName templateDir = do
       conf <- join $ readConfig <$> resolveDir' templateDir <*> resolveFile' confFile
       runResourceT . runAWST conf $ do
-        stackId <- deployStack disableRollback stackName
-        liftIO $ putStrLn $ "Tracking status of stack " <> unStackId stackId
-        trackStackStatus stackId
+        stack <- findStack stackName =<< asks _stacks
+        stackId <- deployStack disableRollback stack
+        liftIO $ putTextLn $ "Tracking status of stack " <> unStackName stackName
+        trackStackStatus stackName
 
 confFileOpt :: Parser FilePath
 confFileOpt = strOption $
@@ -76,8 +67,8 @@ disableRollbackSwitch = switch $
      long "disable-rollback"
   <> help "Disable rollback of stack if stack creation fails"
 
-stackNameArg :: Parser Text
-stackNameArg = strArgument $
+stackNameArg :: Parser StackName
+stackNameArg = argument auto $
      metavar "STACK_NAME"
   <> help    "Name of the stack to be deployed"
 
@@ -86,27 +77,13 @@ templateDirArg = strArgument $
      metavar "TEMPLATE_DIR"
   <> help    "Directory where template files are located"  
 
-readConfig :: Path Abs Dir -> Path Abs File -> IO Config
-readConfig templateDir confFile = do
-  env <- newEnv Discover <&> envRegion .~ Frankfurt
-  DhallConfig {..} <- readDhallConfig confFile
-  return Config { _templateDir = templateDir, _env = env, .. }
-
-readDhallConfig :: Path Abs File -> IO DhallConfig
-readDhallConfig = inputFile (autoWith interpretOptions) . toFilePath
-  where
-    interpretOptions = defaultInterpretOptions
-      { fieldModifier = T.dropWhile (== '_')
-      , singletonConstructors = Bare
-      }
-
 reportError :: IO () -> IO ()
 reportError
     = handle reportIOError
     . handle reportAWSError
     . handling _ServiceError reportServiceError
   where
-    reportServiceError error = putStrLn $
+    reportServiceError error = putTextLn $
            "ERROR "
         <> "ServiceError "
         <> extractErrorCode error
@@ -123,4 +100,4 @@ reportError
     reportAWSError = reportError
 
     reportError :: Show e => e -> IO ()
-    reportError = putStrLn . ("ERROR " <>) . pack . show
+    reportError = putTextLn . ("ERROR " <>) . pack . show

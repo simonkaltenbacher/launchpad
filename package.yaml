@@ -29,8 +29,11 @@ dependencies:
 - optparse-applicative
 - path
 - path-io
+- relude
 - text
 - transformers
+
+default-extensions: NoImplicitPrelude
 
 library:
   source-dirs: src

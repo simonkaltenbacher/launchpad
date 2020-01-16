@@ -4,7 +4,7 @@ cabal-version: 1.12
 --
 -- see: https://github.com/sol/hpack
 --
--- hash: c1f38f9f42c2687c5fe82c0d1ddadeff6c9a73641cb2519b49c7182fdd8a1e87
+-- hash: 0f79cb51f9faa72ea0efc79c400ea3b2314f0cd372ba1493c4557464bcb3a5db
 
 name:           launchpad
 version:        0.1.1
@@ -27,12 +27,13 @@ source-repository head
 library
   exposed-modules:
       LaunchPad.CloudFormation
-      LaunchPad.Type
-      LaunchPad.Type.Dhall
+      LaunchPad.Config
+      LaunchPad.Config.Internal
   other-modules:
       Paths_launchpad
   hs-source-dirs:
       src
+  default-extensions: NoImplicitPrelude
   build-depends:
       amazonka
     , amazonka-cloudformation
@@ -51,6 +52,7 @@ library
     , optparse-applicative
     , path
     , path-io
+    , relude
     , text
     , transformers
   default-language: Haskell2010
@@ -61,6 +63,7 @@ executable launchpad
       Paths_launchpad
   hs-source-dirs:
       app
+  default-extensions: NoImplicitPrelude
   ghc-options: -threaded -rtsopts -with-rtsopts=-N
   build-depends:
       amazonka
@@ -81,6 +84,7 @@ executable launchpad
     , optparse-applicative
     , path
     , path-io
+    , relude
     , text
     , transformers
   default-language: Haskell2010
@@ -92,6 +96,7 @@ test-suite launchpad-test
       Paths_launchpad
   hs-source-dirs:
       test
+  default-extensions: NoImplicitPrelude
   ghc-options: -threaded -rtsopts -with-rtsopts=-N
   build-depends:
       amazonka
@@ -112,6 +117,7 @@ test-suite launchpad-test
     , optparse-applicative
     , path
     , path-io
+    , relude
     , text
     , transformers
   default-language: Haskell2010

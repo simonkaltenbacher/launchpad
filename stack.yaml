@@ -10,3 +10,6 @@ extra-deps:
 - amazonka-s3-1.6.1
 - dhall-1.28.0
 - prettyprinter-1.5.1
+
+ghc-options:
+  "$locals": -fwarn-unused-imports

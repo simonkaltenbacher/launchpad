@@ -1,11 +1,12 @@
 {-# LANGUAGE ConstraintKinds   #-}
+{-# LANGUAGE DeriveGeneric     #-}
 {-# LANGUAGE FlexibleContexts  #-}
 {-# LANGUAGE OverloadedStrings #-}
-{-# LANGUAGE QuasiQuotes       #-}
 {-# LANGUAGE RecordWildCards   #-}
 
 module LaunchPad.CloudFormation
   ( deployStack
+  , findStack
   , getStackStatus
   , trackStackStatus
   )
@@ -13,8 +14,7 @@ module LaunchPad.CloudFormation
 
 import           Conduit                         (MonadResource)
 
-import           Control.Concurrent
-import           Control.Concurrent.MVar
+import           Control.Concurrent              (forkIO, threadDelay)
 import           Control.Exception               (Exception)
 import           Control.Lens                    ((^?), ix, view)
 import           Control.Lens.Setter             ((.~), (?~))
@@ -24,18 +24,17 @@ import           Control.Monad.IO.Class
 import           Control.Monad.Reader
 import           Control.Monad.Trans.AWS
 
-import           Data.ByteString                  (readFile)
 import           Data.Foldable                    (find, fold)
 import           Data.Function                    ((&))
-import           Data.List                        (intersperse)
 import           Data.Maybe                       (fromMaybe, mapMaybe)
-import           Data.Text                        (pack, Text, unpack)
-import           Data.Text.IO                     (putStr, putStrLn)
+import           Data.Text                        (Text, unpack)
 
 import           Formatting
 import           Formatting.Clock                 (timeSpecs)
 
-import           LaunchPad.Type
+import           GHC.Generics                     (Generic)
+
+import           LaunchPad.Config
 
 import qualified Network.AWS.CloudFormation as CF
 import           Network.AWS.Data                 (toText)
@@ -43,54 +42,104 @@ import qualified Network.AWS.S3 as S3
 
 import           Path
 
-import           Prelude                          hiding (putStr, putStrLn, readFile)
+import           Relude                           hiding (toText)
 
 import           System.Clock
 import           System.Console.ANSI              (setCursorColumn)
 import           System.IO                        (hFlush, stdout)
 
 
+newtype StackId = StackId { unStackId :: Text }
+  deriving (Eq, Generic, Show)
+
+newtype ChangeSetName = ChangeSetName { unChangeSetName :: Text }
+  deriving (Eq, Generic, Show)
+
+newtype ChangeSetId = ChangeSetId { unChangeSetId :: Text }
+  deriving (Eq, Generic, Show)
+
 type AWSConstraint' m = (MonadThrow m, MonadCatch m, MonadResource m, MonadReader Config m)
 
-data StackNotFoundError = StackNotFoundError Text
+data InvalidResponseError = InvalidResponseError Text
   deriving (Eq, Show)
 
-data CreateStackError = CreateStackError Text
-  deriving (Eq, Show)
+instance Exception InvalidResponseError
 
 data InvalidStackStatusError = InvalidStackStatusError Text
   deriving (Eq, Show)
 
-instance Exception StackNotFoundError
-instance Exception CreateStackError
 instance Exception InvalidStackStatusError
 
-deployStack :: AWSConstraint' m => Bool -> Text -> m StackId
-deployStack disableRollback stackName = do
-  stack <- findStack stackName =<< asks _stacks
-  liftIO $ putStrLn $ "Uploading templates"
+data StackNotFoundError = StackNotFoundError Text
+  deriving (Eq, Show)
+
+instance Exception StackNotFoundError
+
+findStack :: MonadThrow m => StackName -> [Stack] -> m Stack
+findStack stackName = maybe (throwM $ err) pure . find ((== stackName) . _stackName)
+  where
+    err = StackNotFoundError $ "Unable to find Stack " <> unStackName stackName <> "."
+
+deployStack :: AWSConstraint' m => Bool -> Stack -> m StackId
+deployStack disableRollback (stack @ Stack{..}) = do
+  putTextLn $ "Uploading templates"
   mapM_ uploadTemplate (listTemplateIds stack)
   templateBucketName <- asks _templateBucketName
-  liftIO $ putStrLn $ "Deploying stack " <> stackName <> " to deployment environment " <> _deplEnv stack
+  putTextLn $ "Deploying stack "
+    <> (unStackName _stackName)
+    <> " to deployment environment "
+    <> _deplEnv
   createStack disableRollback stack
+  {-
+  resp <- trying _ServiceError describeStack
+  case resp of
+    Left  _ -> createStack disableRollback stack
+    Right _ -> updateStack stack
+  -}
 
 createStack :: AWSConstraint' m => Bool -> Stack -> m StackId
-createStack disableRollback Stack{..} = handleResp =<< send . createReq =<< asks _templateBucketName
+createStack disableRollback Stack{..} =
+    handleResp =<< send . createReq =<< asks _templateBucketName
   where
     createReq templateBucketName =
-      CF.createStack (_deplEnv <> "-" <> _stackName)
+      CF.createStack (unStackName _stackName)
         & CF.csCapabilities    .~ [CF.CapabilityNamedIAM]
         & CF.csDisableRollback ?~ disableRollback
         & CF.csParameters      .~ fmap (translateParam templateBucketName) _stackParams
         & CF.csTemplateURL     ?~ genS3Url templateBucketName _stackTemplateId
 
     handleResp
-      = maybe (throwM $ CreateStackError "Received invalid response") (pure . StackId)
+      = maybe (throwM $ InvalidResponseError "Received invalid response") (pure . StackId)
       . view CF.csrsStackId
+
+createChangeSet :: AWSConstraint' m => ChangeSetName -> CF.ChangeSetType -> Stack -> m ChangeSetId
+createChangeSet csName csType Stack{..} =
+    handleResp =<< send . createReq =<< asks _templateBucketName
+  where
+    createReq templateBucketName =
+      CF.createChangeSet (unStackName _stackName) (unChangeSetName csName)
+        & CF.ccsChangeSetType ?~ csType
+        & CF.ccsCapabilities  .~ [CF.CapabilityNamedIAM]
+        & CF.ccsParameters    .~ fmap (translateParam templateBucketName) _stackParams
+        & CF.ccsTemplateURL   ?~ genS3Url templateBucketName _stackTemplateId
+
+    handleResp
+      = maybe (throwM $ InvalidResponseError "Received invalid response") (pure . ChangeSetId)
+      . view CF.ccsrsId
+
+updateStack :: AWSConstraint' m => Stack -> m ()
+updateStack Stack{..} =
+    void . send . createReq =<< asks _templateBucketName
+  where
+    createReq templateBucketName =
+      CF.updateStack (unStackName _stackName)
+        & CF.usCapabilities .~ [CF.CapabilityNamedIAM]
+        & CF.usParameters   .~ fmap (translateParam templateBucketName) _stackParams
+        & CF.usTemplateURL  ?~ genS3Url templateBucketName _stackTemplateId
 
 uploadTemplate :: AWSConstraint' m => TemplateId -> m ()
 uploadTemplate tid = do
-    liftIO $ putStr $ unTemplateId tid <> "... "
+    putText $ unTemplateId tid <> "... "
     liftIO $ hFlush stdout
     templateDir <- asks _templateDir
     templateBucketName <- asks _templateBucketName
@@ -99,45 +148,48 @@ uploadTemplate tid = do
       (S3.BucketName templateBucketName)
       (S3.ObjectKey $ unTemplateId tid)
       body
-    liftIO $ putStrLn $ "DONE"
+    putTextLn $ "DONE"
   where
     readBody templateDir
       = liftM (toBody . toHashed)
       . (=<<) (liftIO . readFile . toFilePath)
       . genLocalPath templateDir
 
-describeStack :: AWSConstraint' m => StackId -> m CF.Stack
+describeChangeSet :: AWSConstraint' m => ChangeSetName -> m CF.DescribeChangeSetResponse
+describeChangeSet = send . CF.describeChangeSet . unChangeSetName
+
+describeStack :: AWSConstraint' m => StackName -> m CF.Stack
 describeStack = (=<<) handleResp . send . createReq
   where
-    createReq = flip (CF.dStackName ?~) CF.describeStacks . unStackId
+    createReq = flip (CF.dStackName ?~) CF.describeStacks . unStackName
 
     handleResp
       = maybe (throwM $ InvalidStackStatusError "Invalid stack status") pure
       . (^? CF.dsrsStacks . ix 0)
 
-getStackStatus :: AWSConstraint' m => StackId -> m CF.StackStatus
+getStackStatus :: AWSConstraint' m => StackName -> m CF.StackStatus
 getStackStatus = fmap (view CF.sStackStatus) . describeStack
 
-trackStackStatus :: AWSConstraint' m => StackId -> m ()
-trackStackStatus stackId = do
+trackStackStatus :: AWSConstraint' m => StackName -> m ()
+trackStackStatus stackName = do
   start <- liftIO $ getTime Monotonic
-  stackStatus <- getStackStatus stackId
+  stackStatus <- getStackStatus stackName
   stackStatusVar <- liftIO newEmptyMVar 
   conf <- ask
-  liftIO . void . forkIO $ runResourceT . runAWST conf $ pollStackStatus stackId stackStatusVar
-  reportStatus start stackStatus stackStatusVar
+  liftIO . void . forkIO $ runResourceT . runAWST conf $ pollStackStatus stackStatusVar stackName
+  reportStatus stackStatusVar start stackStatus
 
-pollStackStatus :: AWSConstraint' m => StackId -> MVar CF.StackStatus -> m ()
-pollStackStatus stackId stackStatusVar = loop
+pollStackStatus :: AWSConstraint' m => MVar CF.StackStatus -> StackName -> m ()
+pollStackStatus stackStatusVar stackName = loop
   where
     loop = do
       nSecondDelay 10
-      stackStatus <- getStackStatus stackId
+      stackStatus <- getStackStatus stackName
       liftIO $ putMVar stackStatusVar stackStatus
       when (isInProgress stackStatus) loop
 
-reportStatus :: MonadIO m => TimeSpec -> CF.StackStatus -> MVar CF.StackStatus -> m ()
-reportStatus start stackStatus stackStatusVar = liftIO $ loop stackStatus
+reportStatus :: MonadIO m => MVar CF.StackStatus -> TimeSpec -> CF.StackStatus -> m ()
+reportStatus stackStatusVar start stackStatus = liftIO $ loop stackStatus
   where
     loop stackStatus = do
       end <- getTime Monotonic
@@ -148,7 +200,7 @@ reportStatus start stackStatus stackStatusVar = liftIO $ loop stackStatus
       nSecondDelay 1
       if isInProgress stackStatus'
       then loop stackStatus'
-      else putStrLn ""
+      else putTextLn ""
 
 nSecondDelay :: MonadIO m => Int -> m ()
 nSecondDelay n = liftIO $ threadDelay (n * 1000000)
@@ -158,11 +210,6 @@ isInProgress CF.SSCreateInProgress                = True
 isInProgress CF.SSUpdateInProgress                = True
 isInProgress CF.SSUpdateCompleteCleanupInProgress = True
 isInProgress _                                    = False
-
-findStack :: MonadThrow m => Text -> [Stack] -> m Stack
-findStack stackName = maybe (throwM $ err) pure . find ((== stackName) . _stackName)
-  where
-    err = StackNotFoundError $ "Unable to find Stack " <> stackName <> "."
 
 listTemplateIds :: Stack -> [TemplateId]
 listTemplateIds Stack{..} = _stackTemplateId : mapMaybe extract _stackParams
