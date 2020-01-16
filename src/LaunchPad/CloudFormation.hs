@@ -19,6 +19,7 @@ import           Control.Exception               (Exception)
 import           Control.Lens                    ((^?), ix, view)
 import           Control.Lens.Setter             ((.~), (?~))
 import           Control.Monad                   (liftM, void)
+import           Control.Monad.Extra             (eitherM)
 import           Control.Monad.Catch             (MonadCatch, MonadThrow, throwM)
 import           Control.Monad.IO.Class
 import           Control.Monad.Reader
@@ -80,7 +81,7 @@ findStack stackName = maybe (throwM $ err) pure . find ((== stackName) . _stackN
   where
     err = StackNotFoundError $ "Unable to find Stack " <> unStackName stackName <> "."
 
-deployStack :: AWSConstraint' m => Bool -> Stack -> m StackId
+deployStack :: AWSConstraint' m => Bool -> Stack -> m ()
 deployStack disableRollback (stack @ Stack{..}) = do
   putTextLn $ "Uploading templates"
   mapM_ uploadTemplate (listTemplateIds stack)
@@ -89,13 +90,10 @@ deployStack disableRollback (stack @ Stack{..}) = do
     <> (unStackName _stackName)
     <> " to deployment environment "
     <> _deplEnv
-  createStack disableRollback stack
-  {-
-  resp <- trying _ServiceError describeStack
-  case resp of
-    Left  _ -> createStack disableRollback stack
-    Right _ -> updateStack stack
-  -}
+  eitherM
+    (const . void $ createStack disableRollback stack)
+    (const $ updateStack stack)
+    (trying _ServiceError $ describeStack _stackName)
 
 createStack :: AWSConstraint' m => Bool -> Stack -> m StackId
 createStack disableRollback Stack{..} =
