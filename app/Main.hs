@@ -25,7 +25,7 @@ import           Relude
 main :: IO ()
 main = reportError . join . execParser $ info parser infoMods
   where
-    infoMods = fullDesc <> header "launchpad 0.1.1 - Automate deployment of nested stacks"
+    infoMods = fullDesc <> header "launchpad 0.2.0-alpha - Automate deployment of nested stacks"
 
 parser :: Parser (IO ())
 parser = subparser deployCmd <**> helper
