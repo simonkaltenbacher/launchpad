@@ -7,7 +7,7 @@ module LaunchPad.Config
   , CI.PExpr (..)
   , CI.Stack (..)
   , CI.StackName (..)
-  , CI.TemplateId (..)
+  , CI.ResourceId (..)
   , readConfig
   )
   where
@@ -23,15 +23,19 @@ import           GHC.Generics                    (Generic)
 
 import qualified LaunchPad.Config.Internal as CI
 
+import           Network.AWS.S3.Types            (ServerSideEncryption)
+
 import           Path
 
 import           Relude
 
 data Config = Config
-  { _env                :: Env
-  , _templateBucketName :: Text
-  , _templateDir        :: Path Abs Dir
-  , _stacks             :: [CI.Stack]
+  { _env                  :: Env
+  , _resourceBucketName   :: Text
+  , _sseKmsKeyId          :: Maybe Text
+  , _serverSideEncryption :: Maybe ServerSideEncryption
+  , _resourceDir          :: Path Abs Dir
+  , _stacks               :: [CI.Stack]
   }
   deriving (Generic)
 
@@ -39,7 +43,7 @@ instance HasEnv Config where
   environment = lens _env (\conf env -> conf {_env = env})
 
 readConfig :: (MonadCatch m, MonadIO m) => Path Abs Dir -> Path Abs File -> m Config
-readConfig templateDir confFile = do
+readConfig resourceDir confFile = do
   env <- newEnv Discover <&> envRegion .~ Frankfurt
   CI.DhallConfig {..} <- CI.readDhallConfig confFile
-  return Config { _templateDir = templateDir, _env = env, .. }
+  return Config { _resourceDir = resourceDir, _env = env, .. }

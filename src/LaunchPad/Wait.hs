@@ -63,6 +63,7 @@ await WaitCondition{..} req = do
     liftIO . void . forkIO $ runResourceT . runAWST conf $ monitorET stopSig start _waitMessage
     resp <- awaitCond
     liftIO $ putMVar stopSig ()
+    putTextLn ""
     return resp
   where
     awaitCond
@@ -86,9 +87,7 @@ await WaitCondition{..} req = do
       (CheckFailure msg) -> throwM $ FailedWaitConditionError msg
 
 monitorET :: MonadIO m => MVar () -> TimeSpec -> Text -> m ()
-monitorET stopSig start message = do
-    (S.effects . S.untilLeft) printUpdate
-    putTextLn ""
+monitorET stopSig start message = (S.effects . S.untilLeft) printUpdate
   where
     printUpdate = liftIO $ do
       end <- getTime Monotonic
@@ -96,7 +95,7 @@ monitorET stopSig start message = do
       fprint (stext % " - Elapsed time: " % (right 10 ' ' %. timeSpecs)) message start end
       hFlush stdout
       nSecondDelay 1
-      maybeToRight () <$> tryTakeMVar stopSig
+      maybeToLeft () <$> tryTakeMVar stopSig
 
 nSecondDelay :: MonadIO m => Int -> m ()
 nSecondDelay n = liftIO $ threadDelay (n * 1000000)

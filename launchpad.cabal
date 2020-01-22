@@ -4,7 +4,7 @@ cabal-version: 1.12
 --
 -- see: https://github.com/sol/hpack
 --
--- hash: 3a36cae1415d4f009bd0f4814be15b11a378b2575d9e0f5b9237ff38fed7f495
+-- hash: ff352ebd05ed76420bf052cb8a3a7fd8a2295de9f42975226a059020a7d8c4e8
 
 name:           launchpad
 version:        0.1.1
@@ -30,6 +30,7 @@ library
       LaunchPad.CloudFormation
       LaunchPad.Config
       LaunchPad.Config.Internal
+      LaunchPad.Terminal
       LaunchPad.Wait
   other-modules:
       Paths_launchpad

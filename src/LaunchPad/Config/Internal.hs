@@ -6,35 +6,40 @@ module LaunchPad.Config.Internal
   , PExpr (..)
   , Stack (..)
   , StackName (..)
-  , TemplateId (..)
+  , ResourceId (..)
   , readDhallConfig
   )
   where
 
-import Data.Text    (dropWhile, pack, Text)
+import Data.Text            (dropWhile, pack, Text)
 
 import Dhall
 
-import GHC.Generics (Generic)
+import GHC.Generics         (Generic)
+
+import Network.AWS.S3.Types (ServerSideEncryption)
 
 import Path
 
-import Relude       hiding (dropWhile)
+import Relude               hiding (dropWhile)
 
-import Text.Read    (readsPrec)
+import Text.Read            (readsPrec)
 
 data DhallConfig = DhallConfig
-  { _templateBucketName :: Text
-  , _stacks             :: [Stack]
+  { _resourceBucketName   :: Text
+  , _sseKmsKeyId          :: Maybe Text
+  , _serverSideEncryption :: Maybe ServerSideEncryption
+  , _stacks               :: [Stack]
   }
   deriving (Eq, Generic, Show)
 
 instance FromDhall DhallConfig
+instance FromDhall ServerSideEncryption
 
 data Stack = Stack
   { _deplEnv         :: Text
   , _stackName       :: StackName
-  , _stackTemplateId :: TemplateId
+  , _stackTemplateId :: ResourceId
   , _stackParams     :: [Param]
   }
   deriving (Eq, Generic, Show)
@@ -51,7 +56,7 @@ instance FromDhall Param
 
 data PExpr
   = PLit Text
-  | PTemplateId TemplateId
+  | PResourceId ResourceId
   deriving (Eq, Generic, Show)
 
 instance FromDhall PExpr
@@ -64,10 +69,10 @@ instance FromDhall StackName
 instance Read StackName where
   readsPrec p str = [(StackName $ pack str, mempty)]
 
-newtype TemplateId = TemplateId { unTemplateId :: Text }
+newtype ResourceId = ResourceId { unResourceId :: Text }
   deriving (Eq, Generic, Show)
 
-instance FromDhall TemplateId
+instance FromDhall ResourceId
 
 readDhallConfig :: MonadIO m => Path Abs File -> m DhallConfig
 readDhallConfig = liftIO . inputFile (autoWith interpretOptions) . toFilePath
