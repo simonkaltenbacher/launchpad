@@ -37,15 +37,15 @@ deployCmd = command "deploy" $ info parser infoMods
       <$>  confFileOpt
       <*>  disableRollbackSwitch
       <*>  stackNameArg
-      <*>  templateDirArg
+      <*>  resourceDirArg
       <**> helper
 
     infoMods = progDesc $ "Deploy given stack with name STACK_NAME "
       <> "as specified in CONF_FILE. Template identifiers are resolved "
-      <> "within the given directory TEMPLATE_DIR."
+      <> "within the given directory RESOURCE_DIR."
 
-    run confFile disableRollback stackName templateDir = do
-      conf <- join $ readConfig <$> resolveDir' templateDir <*> resolveFile' confFile
+    run confFile disableRollback stackName resourceDir = do
+      conf <- join $ readConfig <$> resolveDir' resourceDir <*> resolveFile' confFile
       runResourceT . runAWST conf $ do
         stack <- findStack stackName =<< asks _stacks
         void $ deployStack disableRollback stack
@@ -67,10 +67,10 @@ stackNameArg = argument auto $
      metavar "STACK_NAME"
   <> help    "Name of the stack to be deployed"
 
-templateDirArg :: Parser FilePath
-templateDirArg = strArgument $
-     metavar "TEMPLATE_DIR"
-  <> help    "Directory where template files are located"  
+resourceDirArg :: Parser FilePath
+resourceDirArg = strArgument $
+     metavar "RESOURCE_DIR"
+  <> help    "Directory where resources such as templates and scripts are located"  
 
 reportError :: IO () -> IO ()
 reportError
