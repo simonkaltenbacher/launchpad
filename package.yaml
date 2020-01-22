@@ -30,6 +30,7 @@ dependencies:
 - path
 - path-io
 - relude
+- streaming
 - text
 - transformers
 

@@ -12,8 +12,6 @@ import           Control.Monad            ((=<<), join)
 import           Control.Monad.Reader
 import           Control.Monad.Trans.AWS
 
-import           Data.Text                (pack)
-
 import           LaunchPad.CloudFormation
 import           LaunchPad.Config
 
@@ -22,7 +20,6 @@ import           Options.Applicative
 import           Path.IO
 
 import           Relude
-
 
 
 main :: IO ()
@@ -51,9 +48,7 @@ deployCmd = command "deploy" $ info parser infoMods
       conf <- join $ readConfig <$> resolveDir' templateDir <*> resolveFile' confFile
       runResourceT . runAWST conf $ do
         stack <- findStack stackName =<< asks _stacks
-        stackId <- deployStack disableRollback stack
-        liftIO $ putTextLn $ "Tracking status of stack " <> unStackName stackName
-        trackStackStatus stackName
+        void $ deployStack disableRollback stack
 
 confFileOpt :: Parser FilePath
 confFileOpt = strOption $
@@ -100,4 +95,4 @@ reportError
     reportAWSError = reportError
 
     reportError :: Show e => e -> IO ()
-    reportError = putTextLn . ("ERROR " <>) . pack . show
+    reportError = putTextLn . ("ERROR " <>) . show

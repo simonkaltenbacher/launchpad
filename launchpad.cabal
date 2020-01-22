@@ -4,7 +4,7 @@ cabal-version: 1.12
 --
 -- see: https://github.com/sol/hpack
 --
--- hash: aab0a3d98e77f51a97a74514da4291f1675a696f9f36195737cf1bd07ab6c3c6
+-- hash: 3a36cae1415d4f009bd0f4814be15b11a378b2575d9e0f5b9237ff38fed7f495
 
 name:           launchpad
 version:        0.1.1
@@ -30,6 +30,7 @@ library
       LaunchPad.CloudFormation
       LaunchPad.Config
       LaunchPad.Config.Internal
+      LaunchPad.Wait
   other-modules:
       Paths_launchpad
   hs-source-dirs:
@@ -54,6 +55,7 @@ library
     , path
     , path-io
     , relude
+    , streaming
     , text
     , transformers
   default-language: Haskell2010
@@ -86,6 +88,7 @@ executable launchpad
     , path
     , path-io
     , relude
+    , streaming
     , text
     , transformers
   default-language: Haskell2010
@@ -119,6 +122,7 @@ test-suite launchpad-test
     , path
     , path-io
     , relude
+    , streaming
     , text
     , transformers
   default-language: Haskell2010

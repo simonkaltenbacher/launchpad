@@ -8,45 +8,36 @@ module LaunchPad.CloudFormation
   ( deployStack
   , findStack
   , getStackStatus
-  , trackStackStatus
   )
   where
 
-import           Conduit                         (MonadResource)
+import           Conduit                          (MonadResource)
 
-import           Control.Concurrent              (forkIO, threadDelay)
-import           Control.Exception               (Exception)
-import           Control.Lens                    ((^?), ix, view)
-import           Control.Lens.Setter             ((.~), (?~))
-import           Control.Monad                   (liftM, void)
-import           Control.Monad.Extra             (eitherM)
-import           Control.Monad.Catch             (MonadCatch, MonadThrow, throwM)
+import           Control.Exception                (Exception)
+import           Control.Lens
+import           Control.Lens.Setter              ((.~), (?~))
+import           Control.Monad.Catch              (MonadCatch, MonadThrow, throwM)
 import           Control.Monad.IO.Class
 import           Control.Monad.Reader
-import           Control.Monad.Trans.AWS
+import           Control.Monad.Trans.AWS          hiding (await)
 
 import           Data.Foldable                    (find, fold)
 import           Data.Function                    ((&))
-import           Data.Maybe                       (fromMaybe, mapMaybe)
-import           Data.Text                        (Text, unpack)
-
-import           Formatting
-import           Formatting.Clock                 (timeSpecs)
+import           Data.Maybe                       (mapMaybe)
 
 import           GHC.Generics                     (Generic)
 
 import           LaunchPad.Config
+import           LaunchPad.Wait
 
 import qualified Network.AWS.CloudFormation as CF
-import           Network.AWS.Data                 (toText)
 import qualified Network.AWS.S3 as S3
+import qualified Network.AWS.Data as A
 
 import           Path
 
 import           Relude                           hiding (toText)
 
-import           System.Clock
-import           System.Console.ANSI              (setCursorColumn)
 import           System.IO                        (hFlush, stdout)
 
 
@@ -77,38 +68,35 @@ data StackNotFoundError = StackNotFoundError Text
 instance Exception StackNotFoundError
 
 findStack :: MonadThrow m => StackName -> [Stack] -> m Stack
-findStack stackName = maybe (throwM $ err) pure . find ((== stackName) . _stackName)
+findStack stackName = maybe (throwM err) pure . find ((== stackName) . _stackName)
   where
     err = StackNotFoundError $ "Unable to find Stack " <> unStackName stackName <> "."
 
 deployStack :: AWSConstraint' m => Bool -> Stack -> m ()
 deployStack disableRollback (stack @ Stack{..}) = do
-  putTextLn $ "Uploading templates"
-  mapM_ uploadTemplate (listTemplateIds stack)
-  templateBucketName <- asks _templateBucketName
-  putTextLn $ "Deploying stack "
-    <> (unStackName _stackName)
-    <> " to deployment environment "
-    <> _deplEnv
-  eitherM
-    (const . void $ createStack disableRollback stack)
-    (const $ updateStack stack)
-    (trying _ServiceError $ describeStack _stackName)
-
-createStack :: AWSConstraint' m => Bool -> Stack -> m StackId
-createStack disableRollback Stack{..} =
-    handleResp =<< send . createReq =<< asks _templateBucketName
+    putTextLn $ "Uploading templates"
+    mapM_ uploadTemplate (listTemplateIds stack)
+    templateBucketName <- asks _templateBucketName
+    putTextLn $ "Deploying stack "
+      <> (unStackName _stackName)
+      <> " to deployment environment "
+      <> _deplEnv
+    csType <- either (const CF.Create) (const CF.Update)
+      <$> trying _ServiceError (describeStack _stackName)
+    csId <- createChangeSet csName csType stack
+    csCreateComplete <- await changeSetCreateComplete describeChangeSetReq 
+    putTextLn "Created change set successfully"
+    putTextLn "The following changes will be applied:"
+    printChanges csCreateComplete
+    putTextLn "Apply changes? [y/n]: "
+    whenM ((== "y") <$> getLine) $ do
+      executeChangeSet csName
+      await stackCreateOrUpdateComplete describeStackReq
+      putTextLn "Deployed stack successfully"
   where
-    createReq templateBucketName =
-      CF.createStack (unStackName _stackName)
-        & CF.csCapabilities    .~ [CF.CapabilityNamedIAM]
-        & CF.csDisableRollback ?~ disableRollback
-        & CF.csParameters      .~ fmap (translateParam templateBucketName) _stackParams
-        & CF.csTemplateURL     ?~ genS3Url templateBucketName _stackTemplateId
-
-    handleResp
-      = maybe (throwM $ InvalidResponseError "Received invalid response") (pure . StackId)
-      . view CF.csrsStackId
+    csName               = ChangeSetName . unStackName $ _stackName
+    describeChangeSetReq = CF.describeChangeSet . unChangeSetName $ csName
+    describeStackReq     = flip (CF.dStackName ?~) CF.describeStacks . unStackName $ _stackName
 
 createChangeSet :: AWSConstraint' m => ChangeSetName -> CF.ChangeSetType -> Stack -> m ChangeSetId
 createChangeSet csName csType Stack{..} =
@@ -124,16 +112,6 @@ createChangeSet csName csType Stack{..} =
     handleResp
       = maybe (throwM $ InvalidResponseError "Received invalid response") (pure . ChangeSetId)
       . view CF.ccsrsId
-
-updateStack :: AWSConstraint' m => Stack -> m ()
-updateStack Stack{..} =
-    void . send . createReq =<< asks _templateBucketName
-  where
-    createReq templateBucketName =
-      CF.updateStack (unStackName _stackName)
-        & CF.usCapabilities .~ [CF.CapabilityNamedIAM]
-        & CF.usParameters   .~ fmap (translateParam templateBucketName) _stackParams
-        & CF.usTemplateURL  ?~ genS3Url templateBucketName _stackTemplateId
 
 uploadTemplate :: AWSConstraint' m => TemplateId -> m ()
 uploadTemplate tid = do
@@ -165,49 +143,11 @@ describeStack = (=<<) handleResp . send . createReq
       = maybe (throwM $ InvalidStackStatusError "Invalid stack status") pure
       . (^? CF.dsrsStacks . ix 0)
 
+executeChangeSet :: AWSConstraint' m => ChangeSetName -> m ()
+executeChangeSet = void . send . CF.executeChangeSet . unChangeSetName
+
 getStackStatus :: AWSConstraint' m => StackName -> m CF.StackStatus
 getStackStatus = fmap (view CF.sStackStatus) . describeStack
-
-trackStackStatus :: AWSConstraint' m => StackName -> m ()
-trackStackStatus stackName = do
-  start <- liftIO $ getTime Monotonic
-  stackStatus <- getStackStatus stackName
-  stackStatusVar <- liftIO newEmptyMVar 
-  conf <- ask
-  liftIO . void . forkIO $ runResourceT . runAWST conf $ pollStackStatus stackStatusVar stackName
-  reportStatus stackStatusVar start stackStatus
-
-pollStackStatus :: AWSConstraint' m => MVar CF.StackStatus -> StackName -> m ()
-pollStackStatus stackStatusVar stackName = loop
-  where
-    loop = do
-      nSecondDelay 10
-      stackStatus <- getStackStatus stackName
-      liftIO $ putMVar stackStatusVar stackStatus
-      when (isInProgress stackStatus) loop
-
-reportStatus :: MonadIO m => MVar CF.StackStatus -> TimeSpec -> CF.StackStatus -> m ()
-reportStatus stackStatusVar start stackStatus = liftIO $ loop stackStatus
-  where
-    loop stackStatus = do
-      end <- getTime Monotonic
-      stackStatus' <- fromMaybe stackStatus <$> tryTakeMVar stackStatusVar
-      setCursorColumn 0
-      fprint (stext % " Elapsed time: " % (right 10 ' ' %. timeSpecs)) (toText stackStatus') start end
-      hFlush stdout
-      nSecondDelay 1
-      if isInProgress stackStatus'
-      then loop stackStatus'
-      else putTextLn ""
-
-nSecondDelay :: MonadIO m => Int -> m ()
-nSecondDelay n = liftIO $ threadDelay (n * 1000000)
-
-isInProgress :: CF.StackStatus -> Bool
-isInProgress CF.SSCreateInProgress                = True
-isInProgress CF.SSUpdateInProgress                = True
-isInProgress CF.SSUpdateCompleteCleanupInProgress = True
-isInProgress _                                    = False
 
 listTemplateIds :: Stack -> [TemplateId]
 listTemplateIds Stack{..} = _stackTemplateId : mapMaybe extract _stackParams
@@ -225,7 +165,7 @@ translateParam templateBucketName (Param pname pvalue) =
     evalParamExpr (PTemplateId tid) = genS3Url templateBucketName tid
 
 genLocalPath :: MonadThrow m => Path Abs Dir -> TemplateId -> m (Path Abs File)
-genLocalPath templateDir = fmap (templateDir </>) . parseRelFile . unpack . unTemplateId
+genLocalPath templateDir = fmap (templateDir </>) . parseRelFile . toString . unTemplateId
 
 genS3Url :: Text -> TemplateId -> Text
 genS3Url templateBucketName tid = fold
@@ -234,3 +174,48 @@ genS3Url templateBucketName tid = fold
   , ".s3.eu-central-1.amazonaws.com/"
   , unTemplateId tid
   ]
+
+printChanges :: MonadIO m => CF.DescribeChangeSetResponse -> m ()
+printChanges = mapM_ printChange . listChanges
+  where
+    listChanges
+      = toListOf
+      $ CF.desrsChanges
+      . traverse
+      . CF.cResourceChange
+      . _Just
+
+    printChange change = putTextLn . fold . intersperse " " . fmap (fromMaybe "-") $
+      [ view CF.rcLogicalResourceId $ change
+      , view CF.rcResourceType $ change
+      , fmap A.toText . view CF.rcAction $ change
+      ]
+
+changeSetCreateComplete :: WaitCondition CF.DescribeChangeSet
+changeSetCreateComplete = WaitCondition {..}
+  where
+    _check _ resp = case resp ^. CF.desrsStatus of
+      CF.CSSCreateComplete   -> CheckSuccess
+      CF.CSSCreateInProgress -> CheckRetry
+      CF.CSSCreatePending    -> CheckRetry
+      _                      -> CheckFailure "Failed to create change set."
+
+    _recover err = RecoverFailure . show $ err
+    _frequency = 10
+    _numAttempts = 100
+    _waitMessage = "Creating change set"
+
+stackCreateOrUpdateComplete :: WaitCondition CF.DescribeStacks
+stackCreateOrUpdateComplete = WaitCondition {..}
+  where
+    _check _ resp = case resp ^? CF.dsrsStacks . ix 0 . CF.sStackStatus of
+      Just CF.SSCreateComplete   -> CheckSuccess
+      Just CF.SSUpdateComplete   -> CheckSuccess
+      Just CF.SSCreateInProgress -> CheckRetry
+      Just CF.SSUpdateInProgress -> CheckRetry
+      _                          -> CheckFailure "Failed to create or update stack."
+
+    _recover err = RecoverFailure . show $ err
+    _frequency = 10
+    _numAttempts = 100
+    _waitMessage = "Deploying stack"
