@@ -29,6 +29,7 @@ dependencies:
 - optparse-applicative
 - path
 - path-io
+- prettyprinter
 - relude
 - streaming
 - text

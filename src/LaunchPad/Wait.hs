@@ -1,6 +1,6 @@
+{-# LANGUAGE FlexibleContexts    #-}
 {-# LANGUAGE OverloadedStrings   #-}
 {-# LANGUAGE RecordWildCards     #-}
-{-# LANGUAGE ScopedTypeVariables #-}
 
 module LaunchPad.Wait
   ( await
@@ -18,13 +18,14 @@ import           Control.Monad.Trans.AWS hiding (await)
 import           Formatting
 import           Formatting.Clock        (timeSpecs)
 
+import           LaunchPad.PrettyPrint
+
 import           Relude
 
 import qualified Streaming.Prelude as S
 
 import           System.Clock
 import           System.Console.ANSI     (setCursorColumn)
-import           System.IO               (hFlush, stdout)
 
 data CheckResult
   = CheckSuccess
@@ -55,12 +56,13 @@ data FailedWaitConditionError = FailedWaitConditionError Text
 
 instance Exception FailedWaitConditionError
 
-await :: (AWSConstraint r m, AWSRequest a) => WaitCondition a -> a -> m (Rs a)
+await :: (AWSConstraint r m, AWSRequest a, PrettyPrint m) => WaitCondition a -> a -> m (Rs a)
 await WaitCondition{..} req = do
     start <- liftIO $ getTime Monotonic
     stopSig <- liftIO newEmptyMVar 
     conf <- ask
-    liftIO . void . forkIO $ runResourceT . runAWST conf $ monitorET stopSig start _waitMessage
+    pstate <- getPrettyState
+    liftIO . void . forkIO $ runResourceT . runAWST conf . runPretty pstate $ monitorET stopSig start _waitMessage
     resp <- awaitCond
     liftIO $ putMVar stopSig ()
     putTextLn ""
@@ -86,14 +88,13 @@ await WaitCondition{..} req = do
       CheckRetry         -> pure Nothing
       (CheckFailure msg) -> throwM $ FailedWaitConditionError msg
 
-monitorET :: MonadIO m => MVar () -> TimeSpec -> Text -> m ()
+monitorET :: (MonadIO m, PrettyPrint m) => MVar () -> TimeSpec -> Text -> m ()
 monitorET stopSig start message = (S.effects . S.untilLeft) printUpdate
   where
-    printUpdate = liftIO $ do
-      end <- getTime Monotonic
-      setCursorColumn 0
-      fprint (stext % " - Elapsed time: " % (right 10 ' ' %. timeSpecs)) message start end
-      hFlush stdout
+    printUpdate = do
+      end <- liftIO $ getTime Monotonic
+      liftIO $ setCursorColumn 0
+      putDocB . pretty $ sformat (stext % " - Elapsed time: " % (right 10 ' ' %. timeSpecs)) message start end
       nSecondDelay 1
       maybeToLeft () <$> tryTakeMVar stopSig
 

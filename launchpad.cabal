@@ -4,7 +4,7 @@ cabal-version: 1.12
 --
 -- see: https://github.com/sol/hpack
 --
--- hash: 55328983fe9123510965a3349ed4fa26b81a5fa7c1f3acad20580725d9619b9d
+-- hash: 5b16860ee1cbca234be3e3b765fcc7e34da8ae8bf27ff1f03cc18b65b3f7efaa
 
 name:           launchpad
 version:        0.2.0-alpha
@@ -28,9 +28,10 @@ library
   exposed-modules:
       Control.Monad.Extra
       LaunchPad.CloudFormation
+      LaunchPad.CloudFormation.Internal
       LaunchPad.Config
       LaunchPad.Config.Internal
-      LaunchPad.Terminal
+      LaunchPad.PrettyPrint
       LaunchPad.Wait
   other-modules:
       Paths_launchpad
@@ -55,6 +56,7 @@ library
     , optparse-applicative
     , path
     , path-io
+    , prettyprinter
     , relude
     , streaming
     , text
@@ -88,6 +90,7 @@ executable launchpad
     , optparse-applicative
     , path
     , path-io
+    , prettyprinter
     , relude
     , streaming
     , text
@@ -122,6 +125,7 @@ test-suite launchpad-test
     , optparse-applicative
     , path
     , path-io
+    , prettyprinter
     , relude
     , streaming
     , text

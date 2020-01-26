@@ -1,4 +1,5 @@
-{-# LANGUAGE DeriveGeneric #-}
+{-# LANGUAGE DeriveGeneric              #-}
+{-# LANGUAGE GeneralizedNewtypeDeriving #-}
 
 module LaunchPad.Config.Internal
   ( DhallConfig (..)
@@ -11,19 +12,21 @@ module LaunchPad.Config.Internal
   )
   where
 
-import Data.Text            (dropWhile, pack, Text)
+import Data.Text                 (dropWhile, pack, Text)
+import Data.Text.Prettyprint.Doc
 
 import Dhall
 
-import GHC.Generics         (Generic)
+import GHC.Generics              (Generic)
 
-import Network.AWS.S3.Types (ServerSideEncryption)
+import Network.AWS.S3.Types      (ServerSideEncryption)
 
 import Path
 
-import Relude               hiding (dropWhile)
+import Relude                    hiding (dropWhile)
 
-import Text.Read            (readsPrec)
+import Text.Read                 (readsPrec)
+
 
 data DhallConfig = DhallConfig
   { _resourceBucketName   :: Text
@@ -37,8 +40,7 @@ instance FromDhall DhallConfig
 instance FromDhall ServerSideEncryption
 
 data Stack = Stack
-  { _deplEnv         :: Text
-  , _stackName       :: StackName
+  { _stackName       :: StackName
   , _stackTemplateId :: ResourceId
   , _stackParams     :: [Param]
   }
@@ -62,7 +64,7 @@ data PExpr
 instance FromDhall PExpr
 
 newtype StackName = StackName { unStackName :: Text }
-  deriving (Eq, Generic, Show)
+  deriving (Eq, Generic, Pretty, Show)
 
 instance FromDhall StackName
 
@@ -70,7 +72,7 @@ instance Read StackName where
   readsPrec p str = [(StackName $ pack str, mempty)]
 
 newtype ResourceId = ResourceId { unResourceId :: Text }
-  deriving (Eq, Generic, Show)
+  deriving (Eq, Generic, Pretty, Show)
 
 instance FromDhall ResourceId
 
