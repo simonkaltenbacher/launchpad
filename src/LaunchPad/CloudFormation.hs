@@ -23,8 +23,8 @@ import qualified Network.AWS.CloudFormation as CF
 import           Relude                            hiding (toText)
 
 
-deployStack :: AWSConstraint' m => Bool -> Stack -> m ()
-deployStack disableRollback (stack @ Stack{..}) = runPretty initPretty $ do
+deployStack :: (AWSConstraint' m, PrettyPrint m) => Bool -> Stack -> m ()
+deployStack disableRollback (stack @ Stack{..}) = do
     withBlock "Uploading templates" $ mapM_ uploadResource' (listResourceIds stack)
     withBlock ("Deploying stack " <> pretty _stackName) $ do
       resBucketName <- asks _resourceBucketName

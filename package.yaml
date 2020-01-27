@@ -17,6 +17,7 @@ dependencies:
 - amazonka-cloudformation
 - amazonka-s3
 - ansi-terminal
+- async
 - base >= 4.7 && < 5
 - bytestring
 - conduit

@@ -4,7 +4,7 @@ cabal-version: 1.12
 --
 -- see: https://github.com/sol/hpack
 --
--- hash: 5b16860ee1cbca234be3e3b765fcc7e34da8ae8bf27ff1f03cc18b65b3f7efaa
+-- hash: 2062be237c393c193f1fcd50103998945ecac6a372b5d5b2b782b4768459d9db
 
 name:           launchpad
 version:        0.2.0-alpha
@@ -26,11 +26,11 @@ source-repository head
 
 library
   exposed-modules:
-      Control.Monad.Extra
       LaunchPad.CloudFormation
       LaunchPad.CloudFormation.Internal
       LaunchPad.Config
       LaunchPad.Config.Internal
+      LaunchPad.Exception
       LaunchPad.PrettyPrint
       LaunchPad.Wait
   other-modules:
@@ -44,6 +44,7 @@ library
     , amazonka-core
     , amazonka-s3
     , ansi-terminal
+    , async
     , base >=4.7 && <5
     , bytestring
     , clock
@@ -77,6 +78,7 @@ executable launchpad
     , amazonka-core
     , amazonka-s3
     , ansi-terminal
+    , async
     , base >=4.7 && <5
     , bytestring
     , clock
@@ -112,6 +114,7 @@ test-suite launchpad-test
     , amazonka-core
     , amazonka-s3
     , ansi-terminal
+    , async
     , base >=4.7 && <5
     , bytestring
     , clock

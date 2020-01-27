@@ -18,12 +18,12 @@ module LaunchPad.CloudFormation.Internal
   , genLocalPath
   , genS3Url
   , getStackStatus
-  , InvalidResponseError
-  , InvalidStackStatusError
+  , InvalidResponseException
+  , InvalidStackStatusException
   , listResourceIds
   , stackCreateOrUpdateComplete
   , StackId (..)
-  , StackNotFoundError
+  , StackNotFoundException
   , translateParam
   , uploadResource
   , module LaunchPad.Config
@@ -32,7 +32,6 @@ module LaunchPad.CloudFormation.Internal
 
 import           Conduit                          (MonadResource)
 
-import           Control.Exception                (Exception)
 import           Control.Lens
 import           Control.Lens.Setter              ((.~), (?~))
 import           Control.Monad.Catch              (MonadCatch, MonadThrow, throwM)
@@ -47,6 +46,7 @@ import           Data.Maybe                       (mapMaybe)
 import           GHC.Generics                     (Generic)
 
 import           LaunchPad.Config
+import           LaunchPad.Exception
 import           LaunchPad.PrettyPrint
 import           LaunchPad.Wait
 
@@ -69,25 +69,10 @@ newtype ChangeSetId = ChangeSetId { unChangeSetId :: Text }
 
 type AWSConstraint' m = (MonadThrow m, MonadCatch m, MonadResource m, MonadReader Config m)
 
-data InvalidResponseError = InvalidResponseError Text
-  deriving (Eq, Show)
-
-instance Exception InvalidResponseError
-
-data InvalidStackStatusError = InvalidStackStatusError Text
-  deriving (Eq, Show)
-
-instance Exception InvalidStackStatusError
-
-data StackNotFoundError = StackNotFoundError Text
-  deriving (Eq, Show)
-
-instance Exception StackNotFoundError
-
 findStack :: MonadThrow m => StackName -> [Stack] -> m Stack
 findStack stackName = maybe (throwM err) pure . find ((== stackName) . _stackName)
   where
-    err = StackNotFoundError . renderDoc $ "Unable to find Stack " <> pretty stackName <> "."
+    err = StackNotFoundException . renderDoc $ "Unable to find Stack " <> pretty stackName <> "."
 
 createChangeSet :: AWSConstraint' m => ChangeSetName -> CF.ChangeSetType -> Stack -> m ChangeSetId
 createChangeSet csName csType Stack{..} =
@@ -101,7 +86,7 @@ createChangeSet csName csType Stack{..} =
         & CF.ccsTemplateURL   ?~ genS3Url resBucketName _stackTemplateId
 
     handleResp
-      = maybe (throwM $ InvalidResponseError "Received invalid response") (pure . ChangeSetId)
+      = maybe (throwM $ InvalidResponseException "Received invalid response") (pure . ChangeSetId)
       . view CF.ccsrsId
 
 uploadResource :: AWSConstraint' m => ResourceId -> m ()
@@ -134,7 +119,7 @@ describeStack = (=<<) handleResp . send . createReq
     createReq = flip (CF.dStackName ?~) CF.describeStacks . unStackName
 
     handleResp
-      = maybe (throwM $ InvalidStackStatusError "Invalid stack status") pure
+      = maybe (throwM $ InvalidStackStatusException "Invalid stack status") pure
       . (^? CF.dsrsStacks . ix 0)
 
 executeChangeSet :: AWSConstraint' m => ChangeSetId -> m ()

@@ -1,29 +1,33 @@
-{-# LANGUAGE OverloadedStrings #-}
-{-# LANGUAGE RecordWildCards   #-}
+{-# LANGUAGE FlexibleContexts     #-}
+{-# LANGUAGE OverloadedStrings    #-}
+{-# LANGUAGE RecordWildCards      #-}
+{-# LANGUAGE ScopedTypeVariables  #-}
 
 module Main where
 
-import           Conduit
+import Conduit
 
-import           Control.Exception        (handle, IOException)
-import           Control.Exception.Lens   (handling)
-import           Control.Lens.Getter      (view)
-import           Control.Monad            ((=<<), join)
-import           Control.Monad.Reader
-import           Control.Monad.Trans.AWS
+import Control.Exception        (IOException)
+import Control.Exception.Lens   (handling)
+import Control.Monad            ((=<<), join)
+import Control.Monad.Catch      (handle, MonadCatch)
+import Control.Monad.Reader
+import Control.Monad.Trans.AWS
 
-import           LaunchPad.CloudFormation
-import           LaunchPad.Config
+import LaunchPad.CloudFormation
+import LaunchPad.Config
+import LaunchPad.Exception
+import LaunchPad.PrettyPrint
 
-import           Options.Applicative
+import Options.Applicative
 
-import           Path.IO
+import Path.IO
 
-import           Relude
+import Relude
 
 
 main :: IO ()
-main = reportError . join . execParser $ info parser infoMods
+main = join . liftIO . execParser $ info parser infoMods
   where
     infoMods = fullDesc <> header "launchpad 0.2.0-alpha - Automate deployment of nested stacks"
 
@@ -44,9 +48,9 @@ deployCmd = command "deploy" $ info parser infoMods
       <> "as specified in CONF_FILE. Template identifiers are resolved "
       <> "within the given directory RESOURCE_DIR."
 
-    run confFile disableRollback stackName resourceDir = do
+    run confFile disableRollback stackName resourceDir = reportError $ do
       conf <- join $ readConfig <$> resolveDir' resourceDir <*> resolveFile' confFile
-      runResourceT . runAWST conf $ do
+      runResourceT . runAWST conf . runPretty initPretty $ do
         stack <- findStack stackName =<< asks _stacks
         void $ deployStack disableRollback stack
 
@@ -72,27 +76,23 @@ resourceDirArg = strArgument $
      metavar "RESOURCE_DIR"
   <> help    "Directory where resources such as templates and scripts are located"  
 
-reportError :: IO () -> IO ()
+reportError :: forall m. (MonadCatch m, MonadIO m) => m () -> m ()
 reportError
-    = handle reportIOError
-    . handle reportAWSError
-    . handling _ServiceError reportServiceError
+    = handle printIOException
+    . handle printAWSError
+    . handling _ServiceError printServiceError
+    . handle printLaunchPadException
   where
-    reportServiceError error = putTextLn $
-           "ERROR "
-        <> "ServiceError "
-        <> extractErrorCode error
-        <> ": "
-        <> extractErrorMessage error
-      where
-        extractErrorCode = (\(ErrorCode c) -> c) . view serviceCode
-        extractErrorMessage = foldMap (\(ErrorMessage m) -> m) . view serviceMessage
+    printServiceError = printErrorPretty
 
-    reportIOError :: IOException -> IO ()
-    reportIOError = reportError
+    printIOException :: IOException -> m ()
+    printIOException = printErrorPretty
 
-    reportAWSError :: Error -> IO ()
-    reportAWSError = reportError
+    printAWSError :: Error -> m ()
+    printAWSError = printErrorPretty
 
-    reportError :: Show e => e -> IO ()
-    reportError = putTextLn . ("ERROR " <>) . show
+    printLaunchPadException :: SomeLaunchPadException -> m ()
+    printLaunchPadException = printErrorPretty
+
+printErrorPretty :: (MonadIO m, Pretty e) => e -> m ()
+printErrorPretty = putTextLn . renderDoc . pretty
