@@ -12,7 +12,6 @@ import           Control.Lens
 import           Control.Lens.Setter               ((?~))
 import           Control.Monad.IO.Class
 import           Control.Monad.Reader
-import           Control.Monad.Trans.AWS           hiding (await)
 
 import           LaunchPad.CloudFormation.Internal
 import           LaunchPad.PrettyPrint
@@ -28,8 +27,7 @@ deployStack disableRollback (stack @ Stack{..}) = do
     withBlock "Uploading templates" $ mapM_ uploadResource' (listResourceIds stack)
     withBlock ("Deploying stack " <> pretty _stackName) $ do
       resBucketName <- asks _resourceBucketName
-      csType <- either (const CF.Create) (const CF.Update)
-        <$> trying _ServiceError (describeStack _stackName)
+      csType <- bool CF.Create CF.Update <$> stackExists _stackName
       csId <- createChangeSet csName csType stack
       csCreateComplete <- await changeSetCreateComplete (describeChangeSetReq csId)
       putDocBLn "Created change set successfully"

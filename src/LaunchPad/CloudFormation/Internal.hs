@@ -17,11 +17,11 @@ module LaunchPad.CloudFormation.Internal
   , findStack
   , genLocalPath
   , genS3Url
-  , getStackStatus
   , InvalidResponseException
   , InvalidStackStatusException
   , listResourceIds
   , stackCreateOrUpdateComplete
+  , stackExists
   , StackId (..)
   , StackNotFoundException
   , translateParam
@@ -125,8 +125,14 @@ describeStack = (=<<) handleResp . send . createReq
 executeChangeSet :: AWSConstraint' m => ChangeSetId -> m ()
 executeChangeSet = void . send . CF.executeChangeSet . unChangeSetId
 
-getStackStatus :: AWSConstraint' m => StackName -> m CF.StackStatus
-getStackStatus = fmap (view CF.sStackStatus) . describeStack
+stackExists :: AWSConstraint' m => StackName -> m Bool
+stackExists
+    = fmap (maybe False exists . (^? _Right . CF.sStackStatus))
+    . trying _ServiceError . describeStack 
+  where
+    exists CF.SSDeleteComplete   = False
+    exists CF.SSReviewInProgress = False
+    exists _                     = True
 
 listResourceIds :: Stack -> [ResourceId]
 listResourceIds Stack{..} = _stackTemplateId : mapMaybe extract _stackParams
