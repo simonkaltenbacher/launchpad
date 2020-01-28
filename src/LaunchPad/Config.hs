@@ -32,9 +32,9 @@ import           Relude
 data Config = Config
   { _env                  :: Env
   , _resourceBucketName   :: Text
+  , _resourceDir          :: Path Abs Dir
   , _sseKmsKeyId          :: Maybe Text
   , _serverSideEncryption :: Maybe ServerSideEncryption
-  , _resourceDir          :: Path Abs Dir
   , _stacks               :: [CI.Stack]
   }
   deriving (Generic)

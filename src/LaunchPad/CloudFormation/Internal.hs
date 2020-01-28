@@ -80,6 +80,7 @@ createChangeSet csName csType Stack{..} =
         & CF.ccsChangeSetType ?~ csType
         & CF.ccsCapabilities  .~ [CF.CapabilityNamedIAM]
         & CF.ccsParameters    .~ fmap (translateParam resBucketName) _stackParams
+        & CF.ccsRoleARN       .~ _roleArn
         & CF.ccsTemplateURL   ?~ genS3Url resBucketName _stackTemplateId
 
     handleResp

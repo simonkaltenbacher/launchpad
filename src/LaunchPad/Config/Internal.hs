@@ -40,7 +40,8 @@ instance FromDhall DhallConfig
 instance FromDhall ServerSideEncryption
 
 data Stack = Stack
-  { _stackName       :: StackName
+  { _roleArn         :: Maybe Text
+  , _stackName       :: StackName
   , _stackTemplateId :: ResourceId
   , _stackParams     :: [Param]
   }
