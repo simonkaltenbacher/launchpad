@@ -28,6 +28,10 @@ instance Show SomeLaunchPadException where
   showsPrec p (SomeLaunchPadException e) = showsPrec p e
 
 instance Exception SomeLaunchPadException where
+  toException = toException . SomeException
+  fromException sexc = do
+    SomeException exc <- fromException sexc
+    cast exc
 
 instance Pretty SomeLaunchPadException where
   pretty (SomeLaunchPadException e) = pretty e
