@@ -17,13 +17,10 @@ module LaunchPad.CloudFormation.Internal
   , findStack
   , genLocalPath
   , genS3Url
-  , InvalidResponseException
-  , InvalidStackStatusException
   , listResourceIds
   , stackCreateOrUpdateComplete
   , stackExists
   , StackId (..)
-  , StackNotFoundException
   , translateParam
   , uploadResource
   , module LaunchPad.Config
