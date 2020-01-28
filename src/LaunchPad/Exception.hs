@@ -3,7 +3,8 @@
 {-# LANGUAGE OverloadedStrings          #-}
 
 module LaunchPad.Exception
-  ( InvalidResponseException (..)
+  ( FailedWaitConditionError (..)
+  , InvalidResponseException (..)
   , InvalidStackStatusException (..)
   , StackNotFoundException (..)
   , SomeLaunchPadException
@@ -36,6 +37,15 @@ instance Exception SomeLaunchPadException where
 instance Pretty SomeLaunchPadException where
   pretty (SomeLaunchPadException e) = pretty e
 
+newtype FailedWaitConditionError = FailedWaitConditionError Text
+  deriving (Eq, Pretty, Show)
+
+instance Exception FailedWaitConditionError where
+  toException = toException . SomeLaunchPadException
+  fromException sexc = do
+    SomeLaunchPadException exc <- fromException sexc
+    cast exc
+
 newtype InvalidResponseException = InvalidResponseException Text
   deriving (Eq, Pretty, Show)
 
@@ -64,14 +74,13 @@ instance Exception StackNotFoundException where
     cast exc
 
 instance Pretty IOException where
-  pretty = ("ERROR " <>) . show
+  pretty = show
 
 instance Pretty Error where
-  pretty = ("ERROR " <>) . show
+  pretty = show
 
 instance Pretty ServiceError where
-  pretty error = "ERROR "
-    <> "ServiceError "
+  pretty error = "ServiceError "
     <> (pretty . view serviceCode) error
     <> ": "
     <> (pretty . view serviceMessage) error

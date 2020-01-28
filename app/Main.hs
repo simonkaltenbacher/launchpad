@@ -48,7 +48,7 @@ deployCmd = command "deploy" $ info parser infoMods
       <> "as specified in CONF_FILE. Template identifiers are resolved "
       <> "within the given directory RESOURCE_DIR."
 
-    run confFile disableRollback stackName resourceDir = reportError $ do
+    run confFile disableRollback stackName resourceDir = handleError $ do
       conf <- join $ readConfig <$> resolveDir' resourceDir <*> resolveFile' confFile
       runResourceT . runAWST conf . runPretty initPretty $ do
         stack <- findStack stackName =<< asks _stacks
@@ -76,23 +76,20 @@ resourceDirArg = strArgument $
      metavar "RESOURCE_DIR"
   <> help    "Directory where resources such as templates and scripts are located"  
 
-reportError :: forall m. (MonadCatch m, MonadIO m) => m () -> m ()
-reportError
-    = handle printIOException
-    . handle printAWSError
-    . handling _ServiceError printServiceError
-    . handle printLaunchPadException
+handleError :: forall m. (MonadCatch m, MonadIO m) => m () -> m ()
+handleError
+    = handle reportIOException
+    . handle reportAWSError
+    . handling _ServiceError reportServiceError
+    . handle reportLaunchPadException
   where
-    printServiceError = printErrorPretty
+    reportServiceError = reportError . pretty
 
-    printIOException :: IOException -> m ()
-    printIOException = printErrorPretty
+    reportIOException :: IOException -> m ()
+    reportIOException = reportError . pretty
 
-    printAWSError :: Error -> m ()
-    printAWSError = printErrorPretty
+    reportAWSError :: Error -> m ()
+    reportAWSError = reportError . pretty
 
-    printLaunchPadException :: SomeLaunchPadException -> m ()
-    printLaunchPadException = printErrorPretty
-
-printErrorPretty :: (MonadIO m, Pretty e) => e -> m ()
-printErrorPretty = putTextLn . renderDoc . pretty
+    reportLaunchPadException :: SomeLaunchPadException -> m ()
+    reportLaunchPadException = reportError . pretty

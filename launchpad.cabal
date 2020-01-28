@@ -4,7 +4,7 @@ cabal-version: 1.12
 --
 -- see: https://github.com/sol/hpack
 --
--- hash: 2062be237c393c193f1fcd50103998945ecac6a372b5d5b2b782b4768459d9db
+-- hash: b74f1c4bff14cbc020bda4cbf621a3d41a2ebd064cd44d425259b14cd7736e43
 
 name:           launchpad
 version:        0.2.0-alpha
@@ -58,6 +58,7 @@ library
     , path
     , path-io
     , prettyprinter
+    , prettyprinter-ansi-terminal
     , relude
     , streaming
     , text
@@ -93,6 +94,7 @@ executable launchpad
     , path
     , path-io
     , prettyprinter
+    , prettyprinter-ansi-terminal
     , relude
     , streaming
     , text
@@ -129,6 +131,7 @@ test-suite launchpad-test
     , path
     , path-io
     , prettyprinter
+    , prettyprinter-ansi-terminal
     , relude
     , streaming
     , text

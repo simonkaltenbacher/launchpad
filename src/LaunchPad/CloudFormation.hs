@@ -24,21 +24,24 @@ import           Relude                            hiding (toText)
 
 deployStack :: (AWSConstraint' m, PrettyPrint m) => Bool -> Stack -> m ()
 deployStack disableRollback (stack @ Stack{..}) = do
-    withBlock "Uploading templates" $ mapM_ uploadResource' (listResourceIds stack)
+    withBlock "Uploading templates" $ do
+      mapM_ uploadResource' (listResourceIds stack)
+      reportSuccess "Upload complete"
     withBlock ("Deploying stack " <> pretty _stackName) $ do
       resBucketName <- asks _resourceBucketName
       csType <- bool CF.Create CF.Update <$> stackExists _stackName
       csId <- createChangeSet csName csType stack
       csCreateComplete <- await changeSetCreateComplete (describeChangeSetReq csId)
-      putDocBLn "Created change set successfully"
+      reportSuccess "Created change set"
       withBlock "The following changes will be applied:" $ printChanges csCreateComplete
       whenM (getConfirmation 3 parser "Do you want to continue? [y/n]: ") $ do
         executeChangeSet csId
         await stackCreateOrUpdateComplete describeStackReq
-        putDocBLn "Deployed stack successfully"
+        reportSuccess "Stack deployment complete"
   where
     uploadResource' rid = do
       putDocB $ pretty rid <> "... "
+      uploadResource rid
       putTextLn "DONE"
 
     csName = ChangeSetName . unStackName $ _stackName

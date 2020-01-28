@@ -19,6 +19,7 @@ import           Control.Monad.Trans.AWS  hiding (await)
 import           Formatting
 import           Formatting.Clock         (timeSpecs)
 
+import           LaunchPad.Exception
 import           LaunchPad.PrettyPrint
 
 import           Relude
@@ -46,17 +47,11 @@ data WaitCondition a = WaitCondition
   , _waitMessage :: Text
   }
 
-data FailedWaitConditionError = FailedWaitConditionError Text
-  deriving (Eq, Show)
-
-instance Exception FailedWaitConditionError
-
 await :: forall r m a. (AWSConstraint r m, AWSRequest a, PrettyPrint m) => WaitCondition a -> a -> m (Rs a)
 await WaitCondition{..} req = do
     start <- liftIO $ getTime Monotonic
     conf <- ask
     resp <- wait start =<< monitorCond conf
-    putTextLn ""
     return resp
   where
     monitorCond conf
@@ -82,7 +77,7 @@ await WaitCondition{..} req = do
       (CheckFailure msg) -> throwM $ FailedWaitConditionError msg
 
     wait :: TimeSpec -> Async (Rs a) -> m (Rs a)
-    wait start aresp = either throwM pure =<< loop
+    wait start aresp = either throwM pure =<< loop <* putTextLn ""
       where
         loop = do
           end <- liftIO $ getTime Monotonic

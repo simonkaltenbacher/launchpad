@@ -31,6 +31,7 @@ dependencies:
 - path
 - path-io
 - prettyprinter
+- prettyprinter-ansi-terminal
 - relude
 - streaming
 - text
