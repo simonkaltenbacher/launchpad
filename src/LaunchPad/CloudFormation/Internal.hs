@@ -176,11 +176,12 @@ stackCreateOrUpdateComplete :: WaitCondition CF.DescribeStacks
 stackCreateOrUpdateComplete = WaitCondition {..}
   where
     _check _ resp = case resp ^? CF.dsrsStacks . ix 0 . CF.sStackStatus of
-      Just CF.SSCreateComplete   -> CheckSuccess
-      Just CF.SSUpdateComplete   -> CheckSuccess
-      Just CF.SSCreateInProgress -> CheckRetry
-      Just CF.SSUpdateInProgress -> CheckRetry
-      _                          -> CheckFailure "Failed to create or update stack."
+      Just CF.SSCreateComplete                  -> CheckSuccess
+      Just CF.SSUpdateComplete                  -> CheckSuccess
+      Just CF.SSUpdateCompleteCleanupInProgress -> CheckSuccess
+      Just CF.SSCreateInProgress                -> CheckRetry
+      Just CF.SSUpdateInProgress                -> CheckRetry
+      _                                         -> CheckFailure "Failed to create or update stack."
 
     _recover err = RecoverFailure . show $ err
     _frequency = 10
