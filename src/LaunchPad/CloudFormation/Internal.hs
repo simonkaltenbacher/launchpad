@@ -2,6 +2,7 @@
 {-# LANGUAGE DeriveGeneric              #-}
 {-# LANGUAGE FlexibleContexts           #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
+{-# LANGUAGE LambdaCase                 #-}
 {-# LANGUAGE OverloadedStrings          #-}
 {-# LANGUAGE RecordWildCards            #-}
 
@@ -32,6 +33,7 @@ import           Conduit                          (MonadResource)
 
 import           Control.Lens
 import           Control.Lens.Setter              ((.~), (?~))
+import           Control.Lens.Prism               (_Right)
 import           Control.Monad.Catch              (MonadCatch, MonadThrow, throwM)
 import           Control.Monad.IO.Class
 import           Control.Monad.Reader
@@ -174,32 +176,31 @@ genS3Url resBucketName rid = fold
   , unResourceId rid
   ]
 
-changeSetCreateComplete :: WaitCondition CF.DescribeChangeSet
+changeSetCreateComplete :: WaitCondition CF.DescribeChangeSet CF.DescribeChangeSetResponse
 changeSetCreateComplete = WaitCondition {..}
   where
-    _check _ resp = case resp ^. CF.desrsStatus of
-      CF.CSSCreateComplete   -> CheckSuccess
-      CF.CSSCreateInProgress -> CheckRetry
-      CF.CSSCreatePending    -> CheckRetry
-      _                      -> CheckFailure "Failed to create change set."
+    _check _ = either (WaitFailure . renderDoc . pretty) handleResp
 
-    _recover err = RecoverFailure . show $ err
+    handleResp resp = case  resp ^. CF.desrsStatus of
+      CF.CSSCreateComplete   -> WaitSuccess resp
+      CF.CSSCreateInProgress -> WaitRetry
+      CF.CSSCreatePending    -> WaitRetry
+      _                      -> WaitFailure "Failed to create change set."
+
     _frequency = 10
-    _numAttempts = 150
     _waitMessage = "Creating change set"
 
-stackCreateOrUpdateComplete :: WaitCondition CF.DescribeStacks
-stackCreateOrUpdateComplete = WaitCondition {..}
+stackCreateOrUpdateComplete :: Text -> WaitCondition CF.DescribeStacks CF.DescribeStacksResponse
+stackCreateOrUpdateComplete _waitMessage = WaitCondition {..}
   where
-    _check _ resp = case resp ^? CF.dsrsStacks . ix 0 . CF.sStackStatus of
-      Just CF.SSCreateComplete                  -> CheckSuccess
-      Just CF.SSUpdateComplete                  -> CheckSuccess
-      Just CF.SSUpdateCompleteCleanupInProgress -> CheckSuccess
-      Just CF.SSCreateInProgress                -> CheckRetry
-      Just CF.SSUpdateInProgress                -> CheckRetry
-      _                                         -> CheckFailure "Failed to create or update stack."
+    _check _ = either (WaitFailure . renderDoc . pretty) handleResp
 
-    _recover err = RecoverFailure . show $ err
+    handleResp resp = case resp ^? CF.dsrsStacks . ix 0 . CF.sStackStatus of
+      Just CF.SSCreateComplete                  -> WaitSuccess resp
+      Just CF.SSUpdateComplete                  -> WaitSuccess resp
+      Just CF.SSUpdateCompleteCleanupInProgress -> WaitSuccess resp
+      Just CF.SSCreateInProgress                -> WaitRetry
+      Just CF.SSUpdateInProgress                -> WaitRetry
+      _                                         -> WaitFailure "Failed to create or update stack."
+
     _frequency = 10
-    _numAttempts = 150
-    _waitMessage = "Deploying stack"

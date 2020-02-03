@@ -28,7 +28,7 @@ createStackAction disableRollback (stack @ Stack{..}) = do
   uploadResources stack
   withBlock ("Creating stack " <> pretty _stackName) $ do
     createStack disableRollback stack
-    await stackCreateOrUpdateComplete (createDescribeStackReq _stackName)
+    await (stackCreateOrUpdateComplete "Creating stack") (createDescribeStackReq _stackName)
     reportSuccess "Stack creation complete"
 
 deployStackAction :: (AWSConstraint' m, PrettyPrint m) => Stack -> m ()
@@ -43,7 +43,7 @@ deployStackAction (stack @ Stack{..}) = do
       withBlock "The following changes will be applied:" $ printChanges csCreateComplete
       whenM (getConfirmation 3 parser "Do you want to continue? [y/n]: ") $ do
         executeChangeSet csId
-        await stackCreateOrUpdateComplete (createDescribeStackReq _stackName)
+        await (stackCreateOrUpdateComplete "Deploying stack") (createDescribeStackReq _stackName)
         reportSuccess "Stack deployment complete"
   where
     csName = ChangeSetName . unStackName $ _stackName

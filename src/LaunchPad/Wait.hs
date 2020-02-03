@@ -5,14 +5,13 @@
 
 module LaunchPad.Wait
   ( await
-  , CheckResult (..)
   , FailedWaitConditionError
-  , RecoverResult (..)
   , WaitCondition (..)
+  , WaitResult (..)
   ) where
 
 import           Control.Concurrent       (threadDelay)
-import           Control.Concurrent.Async (Async, async, poll)
+import           Control.Concurrent.Async (async, poll)
 import           Control.Monad.Catch      (throwM)
 import           Control.Monad.Trans.AWS  hiding (await)
 
@@ -29,25 +28,19 @@ import qualified Streaming.Prelude as S
 import           System.Clock
 import           System.Console.ANSI      (setCursorColumn)
 
-data CheckResult
-  = CheckSuccess
-  | CheckRetry
-  | CheckFailure Text
+data WaitResult r
+  = WaitSuccess r
+  | WaitRetry
+  | WaitFailure Text
   deriving (Eq, Show)
 
-data RecoverResult
-  = RecoverRetry
-  | RecoverFailure Text
-  deriving (Eq, Show)
-
-data WaitCondition a = WaitCondition
-  { _check       :: a -> Rs a -> CheckResult
-  , _recover     :: Error -> RecoverResult
+data WaitCondition a r = WaitCondition
+  { _check       :: a -> Either Error (Rs a) -> WaitResult r
   , _frequency   :: Int
   , _waitMessage :: Text
   }
 
-await :: forall r m a. (AWSConstraint r m, AWSRequest a, PrettyPrint m) => WaitCondition a -> a -> m (Rs a)
+await :: (AWSConstraint c m, AWSRequest a, PrettyPrint m) => WaitCondition a r -> a -> m r
 await WaitCondition{..} req = do
     start <- liftIO $ getTime Monotonic
     conf <- ask
@@ -65,26 +58,21 @@ await WaitCondition{..} req = do
 
     pollAws = do
       nSecondDelay _frequency
-      either recover check =<< trying _Error (send req)
+      check =<< trying _Error (send req)
 
-    recover err = case _recover err of
-      RecoverRetry         -> pure $ Left ()
-      (RecoverFailure msg) -> throwM $ FailedWaitConditionError msg
+    check res = case _check req res of
+      WaitSuccess r     -> pure . Right $ r
+      WaitRetry         -> pure $ Left ()
+      (WaitFailure msg) -> throwM $ FailedWaitConditionError msg
 
-    check resp = case _check req resp of
-      CheckSuccess       -> pure . pure $ resp
-      CheckRetry         -> pure $ Left ()
-      (CheckFailure msg) -> throwM $ FailedWaitConditionError msg
-
-    wait :: TimeSpec -> Async (Rs a) -> m (Rs a)
-    wait start aresp = either throwM pure =<< loop <* putTextLn ""
+    wait start ares = either throwM pure =<< loop <* putTextLn ""
       where
         loop = do
           end <- liftIO $ getTime Monotonic
           liftIO $ setCursorColumn 0
           putDocB . pretty $ sformat (stext % " - Elapsed time: " % (right 10 ' ' %. timeSpecs)) _waitMessage start end
           nSecondDelay 1
-          maybe loop pure =<< liftIO (poll aresp)
+          maybe loop pure =<< liftIO (poll ares)
 
 nSecondDelay :: MonadIO m => Int -> m ()
 nSecondDelay n = liftIO $ threadDelay (n * 1000000)
