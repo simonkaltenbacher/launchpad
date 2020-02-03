@@ -11,6 +11,7 @@ module LaunchPad.CloudFormation.Internal
   , ChangeSetId (..)
   , ChangeSetName (..)
   , createChangeSet
+  , createStack
   , describeStack
   , describeChangeSet
   , executeChangeSet
@@ -86,6 +87,21 @@ createChangeSet csName csType Stack{..} =
     handleResp
       = maybe (throwM $ InvalidResponseException "Received invalid response") (pure . ChangeSetId)
       . view CF.ccsrsId
+
+createStack :: AWSConstraint' m => Bool -> Stack -> m StackId
+createStack disableRollback Stack{..} =
+    handleResp =<< send . createReq =<< asks _resourceBucketName
+  where
+    createReq resBucketName =
+      CF.createStack (unStackName _stackName)
+        & CF.csCapabilities    .~ [CF.CapabilityNamedIAM]
+        & CF.csDisableRollback ?~ disableRollback
+        & CF.csParameters      .~ fmap (translateParam resBucketName) _stackParams
+        & CF.csTemplateURL     ?~ genS3Url resBucketName _stackTemplateId
+
+    handleResp
+      = maybe (throwM $ InvalidResponseException "Received invalid response") (pure . StackId)
+      . view CF.csrsStackId
 
 uploadResource :: AWSConstraint' m => ResourceId -> m ()
 uploadResource rid = do

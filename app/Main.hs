@@ -32,10 +32,12 @@ main = join . liftIO . execParser $ info parser infoMods
     infoMods = fullDesc <> header "launchpad 0.2.0 - Automate deployment of nested stacks"
 
 parser :: Parser (IO ())
-parser = subparser deployCmd <**> helper
+parser = subparser commands <**> helper
+  where
+    commands = createCmd <> deployCmd
 
-deployCmd :: Mod CommandFields (IO ())
-deployCmd = command "deploy" $ info parser infoMods
+createCmd :: Mod CommandFields (IO ())
+createCmd = command "create" $ info parser infoMods
   where
     parser = run
       <$>  confFileOpt
@@ -44,7 +46,7 @@ deployCmd = command "deploy" $ info parser infoMods
       <*>  resourceDirArg
       <**> helper
 
-    infoMods = progDesc $ "Deploy given stack with name STACK_NAME "
+    infoMods = progDesc $ "Create given stack with name STACK_NAME "
       <> "as specified in CONF_FILE. Template identifiers are resolved "
       <> "within the given directory RESOURCE_DIR."
 
@@ -52,7 +54,26 @@ deployCmd = command "deploy" $ info parser infoMods
       conf <- join $ readConfig <$> resolveDir' resourceDir <*> resolveFile' confFile
       runResourceT . runAWST conf . runPretty initPretty $ do
         stack <- findStack stackName =<< asks _stacks
-        void $ deployStack disableRollback stack
+        void $ createStackAction disableRollback stack
+
+deployCmd :: Mod CommandFields (IO ())
+deployCmd = command "deploy" $ info parser infoMods
+  where
+    parser = run
+      <$>  confFileOpt
+      <*>  stackNameArg
+      <*>  resourceDirArg
+      <**> helper
+
+    infoMods = progDesc $ "Deploy given stack with name STACK_NAME "
+      <> "as specified in CONF_FILE. Template identifiers are resolved "
+      <> "within the given directory RESOURCE_DIR."
+
+    run confFile stackName resourceDir = handleError $ do
+      conf <- join $ readConfig <$> resolveDir' resourceDir <*> resolveFile' confFile
+      runResourceT . runAWST conf . runPretty initPretty $ do
+        stack <- findStack stackName =<< asks _stacks
+        void $ deployStackAction stack
 
 confFileOpt :: Parser FilePath
 confFileOpt = strOption $
