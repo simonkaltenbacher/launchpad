@@ -4,7 +4,7 @@ let ServerSideEncryption : Type = < AES256 | AWSKMS >
 
 let Param : Type =
   { paramName  : Text
-  , paramValue : Text
+  , paramValue : PExpr
   }
 
 let Stack : Type =
