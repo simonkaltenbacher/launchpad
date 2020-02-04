@@ -32,7 +32,6 @@ import           Relude
 data Config = Config
   { _env                  :: Env
   , _resourceBucketName   :: Text
-  , _resourceDir          :: Path Abs Dir
   , _sseKmsKeyId          :: Maybe Text
   , _serverSideEncryption :: Maybe ServerSideEncryption
   , _stacks               :: [CI.Stack]
@@ -42,8 +41,8 @@ data Config = Config
 instance HasEnv Config where
   environment = lens _env (\conf env -> conf {_env = env})
 
-readConfig :: (MonadCatch m, MonadIO m) => Path Abs Dir -> Path Abs File -> m Config
-readConfig resourceDir confFile = do
+readConfig :: (MonadCatch m, MonadIO m) => Path Abs File -> m Config
+readConfig confFile = do
   env <- newEnv Discover <&> envRegion .~ Frankfurt
   CI.DhallConfig {..} <- CI.readDhallConfig confFile
-  return Config { _resourceDir = resourceDir, _env = env, .. }
+  return Config { _env = env, .. }

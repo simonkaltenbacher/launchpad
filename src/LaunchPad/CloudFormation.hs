@@ -22,12 +22,14 @@ import           LaunchPad.Wait
 
 import qualified Network.AWS.CloudFormation as CF
 
+import           Path
+
 import           Relude                            hiding (toText)
 
 
-createStackAction :: (AWSConstraint' m, PrettyPrint m) => Bool -> Stack -> m ()
-createStackAction disableRollback (stack @ Stack{..}) = do
-  uploadResources stack
+createStackAction :: (AWSConstraint' m, PrettyPrint m) => Bool -> Stack -> Path Abs Dir -> m ()
+createStackAction disableRollback (stack @ Stack{..}) resourceDir  = do
+  uploadResources stack resourceDir
   withBlock ("Create stack " <> pretty _stackName) $ do
     createStack disableRollback stack
     await (stackCreateOrUpdateComplete "Creating stack") (createDescribeStackReq _stackName)
@@ -42,12 +44,12 @@ deleteStackAction (stack @ Stack{..}) = do
       deleteStack _stackName
       await deleteStackComplete (createDescribeStackReq _stackName)
       reportSuccess "Stack deletion complete"
-    
+
     err = throwM . StackNotFoundException . renderDoc $ "Stack " <> pretty _stackName <> " does not exist"
 
-deployStackAction :: (AWSConstraint' m, PrettyPrint m) => Stack -> m ()
-deployStackAction (stack @ Stack{..}) = do
-    uploadResources stack
+deployStackAction :: (AWSConstraint' m, PrettyPrint m) => Stack -> Path Abs Dir -> m ()
+deployStackAction (stack @ Stack{..}) resourceDir = do
+    uploadResources stack resourceDir 
     withBlock ("Deploy stack " <> pretty _stackName) $ do
       resBucketName <- asks _resourceBucketName
       csType <- bool CF.Create CF.Update <$> stackExists _stackName
@@ -72,14 +74,14 @@ createDescribeStackReq = flip (CF.dStackName ?~) CF.describeStacks . unStackName
 describeChangeSetReq :: ChangeSetId -> CF.DescribeChangeSet
 describeChangeSetReq csId = CF.describeChangeSet . unChangeSetId $ csId
 
-uploadResources :: (AWSConstraint' m, PrettyPrint m) => Stack -> m ()
-uploadResources stack = withBlock "Uploading resources" $ do
+uploadResources :: (AWSConstraint' m, PrettyPrint m) => Stack -> Path Abs Dir -> m ()
+uploadResources stack resourceDir = withBlock "Uploading resources" $ do
     mapM_ uploadResource' (listResourceIds stack)
     reportSuccess "Upload complete"
   where
     uploadResource' rid = do
       putDocB $ pretty rid <> "... "
-      uploadResource rid
+      uploadResource rid resourceDir 
       putTextLn "DONE"
 
 printChanges :: (MonadIO m, PrettyPrint m) => CF.DescribeChangeSetResponse -> m ()

@@ -53,10 +53,10 @@ createCmd = command "create" $ info parser infoMods
       <> "within the given directory RESOURCE_DIR."
 
     run confFile disableRollback stackName resourceDir = handleError $ do
-      conf <- join $ readConfig <$> resolveDir' resourceDir <*> resolveFile' confFile
+      conf <- readConfig =<< resolveFile' confFile
       runResourceT . runAWST conf . runPretty initPretty $ do
         stack <- findStack stackName =<< asks _stacks
-        void $ createStackAction disableRollback stack
+        void . createStackAction disableRollback stack =<< resolveDir' resourceDir
 
 deleteCmd :: Mod CommandFields (IO ())
 deleteCmd = command "delete" $ info parser infoMods
@@ -64,15 +64,14 @@ deleteCmd = command "delete" $ info parser infoMods
     parser = run
       <$>  confFileOpt
       <*>  stackNameArg
-      <*>  resourceDirArg
       <**> helper
 
     infoMods = progDesc "Delete given stack" <> createHeader
 
     createHeader = header $ "Delete given stack with name STACK_NAME as specified in CONF_FILE."
 
-    run confFile stackName resourceDir = handleError $ do
-      conf <- join $ readConfig <$> resolveDir' resourceDir <*> resolveFile' confFile
+    run confFile stackName = handleError $ do
+      conf <- readConfig =<< resolveFile' confFile
       runResourceT . runAWST conf . runPretty initPretty $ do
         stack <- findStack stackName =<< asks _stacks
         void $ deleteStackAction stack
@@ -93,10 +92,10 @@ deployCmd = command "deploy" $ info parser infoMods
       <> "within the given directory RESOURCE_DIR."
 
     run confFile stackName resourceDir = handleError $ do
-      conf <- join $ readConfig <$> resolveDir' resourceDir <*> resolveFile' confFile
+      conf <- readConfig =<< resolveFile' confFile
       runResourceT . runAWST conf . runPretty initPretty $ do
         stack <- findStack stackName =<< asks _stacks
-        void $ deployStackAction stack
+        void . deployStackAction stack =<< resolveDir' resourceDir
 
 confFileOpt :: Parser FilePath
 confFileOpt = strOption $
@@ -113,7 +112,7 @@ disableRollbackSwitch = switch $
 stackNameArg :: Parser StackName
 stackNameArg = argument auto $
      metavar "STACK_NAME"
-  <> help    "Name of the stack to be deployed"
+  <> help    "Name of the stack"
 
 resourceDirArg :: Parser FilePath
 resourceDirArg = strArgument $

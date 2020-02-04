@@ -107,9 +107,8 @@ createStack disableRollback Stack{..} =
       = maybe (throwM $ InvalidResponseException "Received invalid response") (pure . StackId)
       . view CF.csrsStackId
 
-uploadResource :: AWSConstraint' m => ResourceId -> m ()
-uploadResource rid = do
-    resourceDir <- asks _resourceDir
+uploadResource :: AWSConstraint' m => ResourceId -> Path Abs Dir -> m ()
+uploadResource rid resourceDir = do
     void . send =<< createReq
       <$> asks _sseKmsKeyId
       <*> asks _serverSideEncryption
