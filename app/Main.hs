@@ -29,7 +29,7 @@ import Relude
 main :: IO ()
 main = join . liftIO . execParser $ info parser infoMods
   where
-    infoMods = fullDesc <> header "launchpad 0.2.0 - Simplify deployment of nested stacks"
+    infoMods = fullDesc <> header "launchpad 0.3.0-alpha - Simplify deployment of nested stacks"
 
 parser :: Parser (IO ())
 parser = subparser commands <**> helper

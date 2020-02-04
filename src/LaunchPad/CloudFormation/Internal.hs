@@ -195,13 +195,18 @@ changeSetCreateComplete = WaitCondition {..}
     _frequency = 10
     _waitMessage = "Creating change set"
 
-deleteStackComplete :: WaitCondition CF.DescribeStacks CF.DescribeStacksResponse
+deleteStackComplete :: WaitCondition CF.DescribeStacks ()
 deleteStackComplete = WaitCondition {..}
   where
-    _check _ = either (WaitFailure . renderDoc . pretty) handleResp
+    _check _ = either handleFailure handleResp
+    
+    handleFailure
+      = bool (WaitFailure "Failed to delete stack") (WaitSuccess ())
+      . isJust
+      . preview _ServiceError
 
     handleResp resp = case resp ^? CF.dsrsStacks . ix 0 . CF.sStackStatus of
-      Just CF.SSDeleteFailed     -> WaitSuccess resp
+      Just CF.SSDeleteFailed     -> WaitSuccess ()
       Just CF.SSDeleteInProgress -> WaitRetry
       _                          -> WaitFailure "Failed to delete stack"
 

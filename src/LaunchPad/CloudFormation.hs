@@ -12,10 +12,11 @@ module LaunchPad.CloudFormation
 
 import           Control.Lens
 import           Control.Lens.Setter               ((?~))
-import           Control.Monad.IO.Class
+import           Control.Monad.Catch               (throwM)
 import           Control.Monad.Reader
 
 import           LaunchPad.CloudFormation.Internal
+import           LaunchPad.Exception
 import           LaunchPad.PrettyPrint
 import           LaunchPad.Wait
 
@@ -34,10 +35,15 @@ createStackAction disableRollback (stack @ Stack{..}) = do
 
 deleteStackAction :: (AWSConstraint' m, PrettyPrint m) => Stack -> m ()
 deleteStackAction (stack @ Stack{..}) = do
-  withBlock ("Delete stack " <> pretty _stackName) $ do
-    deleteStack _stackName
-    await deleteStackComplete (createDescribeStackReq _stackName)
-    reportSuccess "Stack deletion complete"
+    withBlock ("Delete stack " <> pretty _stackName) $
+      ifM (stackExists _stackName) deleteStack' err
+  where
+    deleteStack' = do
+      deleteStack _stackName
+      await deleteStackComplete (createDescribeStackReq _stackName)
+      reportSuccess "Stack deletion complete"
+    
+    err = throwM . StackNotFoundException . renderDoc $ "Stack " <> pretty _stackName <> " does not exist"
 
 deployStackAction :: (AWSConstraint' m, PrettyPrint m) => Stack -> m ()
 deployStackAction (stack @ Stack{..}) = do
