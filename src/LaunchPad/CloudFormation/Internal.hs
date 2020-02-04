@@ -13,6 +13,8 @@ module LaunchPad.CloudFormation.Internal
   , ChangeSetName (..)
   , createChangeSet
   , createStack
+  , deleteStack
+  , deleteStackComplete
   , describeStack
   , describeChangeSet
   , executeChangeSet
@@ -141,6 +143,9 @@ describeStack = (=<<) handleResp . send . createReq
 executeChangeSet :: AWSConstraint' m => ChangeSetId -> m ()
 executeChangeSet = void . send . CF.executeChangeSet . unChangeSetId
 
+deleteStack :: AWSConstraint' m => StackName -> m ()
+deleteStack = void . send . CF.deleteStack . unStackName
+
 stackExists :: AWSConstraint' m => StackName -> m Bool
 stackExists
     = fmap (maybe False exists . (^? _Right . CF.sStackStatus))
@@ -185,10 +190,23 @@ changeSetCreateComplete = WaitCondition {..}
       CF.CSSCreateComplete   -> WaitSuccess resp
       CF.CSSCreateInProgress -> WaitRetry
       CF.CSSCreatePending    -> WaitRetry
-      _                      -> WaitFailure "Failed to create change set."
+      _                      -> WaitFailure "Failed to create change set"
 
     _frequency = 10
     _waitMessage = "Creating change set"
+
+deleteStackComplete :: WaitCondition CF.DescribeStacks CF.DescribeStacksResponse
+deleteStackComplete = WaitCondition {..}
+  where
+    _check _ = either (WaitFailure . renderDoc . pretty) handleResp
+
+    handleResp resp = case resp ^? CF.dsrsStacks . ix 0 . CF.sStackStatus of
+      Just CF.SSDeleteFailed     -> WaitSuccess resp
+      Just CF.SSDeleteInProgress -> WaitRetry
+      _                          -> WaitFailure "Failed to delete stack"
+
+    _frequency = 10
+    _waitMessage = "Deleting stack"
 
 stackCreateOrUpdateComplete :: Text -> WaitCondition CF.DescribeStacks CF.DescribeStacksResponse
 stackCreateOrUpdateComplete _waitMessage = WaitCondition {..}
@@ -201,6 +219,6 @@ stackCreateOrUpdateComplete _waitMessage = WaitCondition {..}
       Just CF.SSUpdateCompleteCleanupInProgress -> WaitSuccess resp
       Just CF.SSCreateInProgress                -> WaitRetry
       Just CF.SSUpdateInProgress                -> WaitRetry
-      _                                         -> WaitFailure "Failed to create or update stack."
+      _                                         -> WaitFailure "Failed to create or update stack"
 
     _frequency = 10

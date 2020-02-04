@@ -4,6 +4,7 @@
 
 module LaunchPad.CloudFormation
   ( createStackAction
+  , deleteStackAction
   , deployStackAction
   , findStack
   )
@@ -26,15 +27,22 @@ import           Relude                            hiding (toText)
 createStackAction :: (AWSConstraint' m, PrettyPrint m) => Bool -> Stack -> m ()
 createStackAction disableRollback (stack @ Stack{..}) = do
   uploadResources stack
-  withBlock ("Creating stack " <> pretty _stackName) $ do
+  withBlock ("Create stack " <> pretty _stackName) $ do
     createStack disableRollback stack
     await (stackCreateOrUpdateComplete "Creating stack") (createDescribeStackReq _stackName)
     reportSuccess "Stack creation complete"
 
+deleteStackAction :: (AWSConstraint' m, PrettyPrint m) => Stack -> m ()
+deleteStackAction (stack @ Stack{..}) = do
+  withBlock ("Delete stack " <> pretty _stackName) $ do
+    deleteStack _stackName
+    await deleteStackComplete (createDescribeStackReq _stackName)
+    reportSuccess "Stack deletion complete"
+
 deployStackAction :: (AWSConstraint' m, PrettyPrint m) => Stack -> m ()
 deployStackAction (stack @ Stack{..}) = do
     uploadResources stack
-    withBlock ("Deploying stack " <> pretty _stackName) $ do
+    withBlock ("Deploy stack " <> pretty _stackName) $ do
       resBucketName <- asks _resourceBucketName
       csType <- bool CF.Create CF.Update <$> stackExists _stackName
       csId <- createChangeSet csName csType stack

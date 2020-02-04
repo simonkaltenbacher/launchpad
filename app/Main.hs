@@ -34,7 +34,7 @@ main = join . liftIO . execParser $ info parser infoMods
 parser :: Parser (IO ())
 parser = subparser commands <**> helper
   where
-    commands = createCmd <> deployCmd
+    commands = createCmd <> deleteCmd <> deployCmd
 
 createCmd :: Mod CommandFields (IO ())
 createCmd = command "create" $ info parser infoMods
@@ -46,8 +46,7 @@ createCmd = command "create" $ info parser infoMods
       <*>  resourceDirArg
       <**> helper
 
-    infoMods = progDesc "Create given stack"
-      <> createHeader
+    infoMods = progDesc "Create given stack" <> createHeader
 
     createHeader = header $ "Create given stack with name STACK_NAME "
       <> "as specified in CONF_FILE. Template identifiers are resolved "
@@ -59,6 +58,25 @@ createCmd = command "create" $ info parser infoMods
         stack <- findStack stackName =<< asks _stacks
         void $ createStackAction disableRollback stack
 
+deleteCmd :: Mod CommandFields (IO ())
+deleteCmd = command "delete" $ info parser infoMods
+  where
+    parser = run
+      <$>  confFileOpt
+      <*>  stackNameArg
+      <*>  resourceDirArg
+      <**> helper
+
+    infoMods = progDesc "Delete given stack" <> createHeader
+
+    createHeader = header $ "Delete given stack with name STACK_NAME as specified in CONF_FILE."
+
+    run confFile stackName resourceDir = handleError $ do
+      conf <- join $ readConfig <$> resolveDir' resourceDir <*> resolveFile' confFile
+      runResourceT . runAWST conf . runPretty initPretty $ do
+        stack <- findStack stackName =<< asks _stacks
+        void $ deleteStackAction stack
+
 deployCmd :: Mod CommandFields (IO ())
 deployCmd = command "deploy" $ info parser infoMods
   where
@@ -68,8 +86,7 @@ deployCmd = command "deploy" $ info parser infoMods
       <*>  resourceDirArg
       <**> helper
 
-    infoMods = progDesc "Deploy given stack"
-      <> deployHeader
+    infoMods = progDesc "Deploy given stack" <> deployHeader
 
     deployHeader = header $ "Deploy given stack with name STACK_NAME "
       <> "as specified in CONF_FILE. Template identifiers are resolved "
