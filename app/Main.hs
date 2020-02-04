@@ -29,7 +29,7 @@ import Relude
 main :: IO ()
 main = join . liftIO . execParser $ info parser infoMods
   where
-    infoMods = fullDesc <> header "launchpad 0.2.0 - Automate deployment of nested stacks"
+    infoMods = fullDesc <> header "launchpad 0.2.0 - Simplify deployment of nested stacks"
 
 parser :: Parser (IO ())
 parser = subparser commands <**> helper
@@ -46,7 +46,10 @@ createCmd = command "create" $ info parser infoMods
       <*>  resourceDirArg
       <**> helper
 
-    infoMods = progDesc $ "Create given stack with name STACK_NAME "
+    infoMods = progDesc "Create given stack"
+      <> createHeader
+
+    createHeader = header $ "Create given stack with name STACK_NAME "
       <> "as specified in CONF_FILE. Template identifiers are resolved "
       <> "within the given directory RESOURCE_DIR."
 
@@ -65,7 +68,10 @@ deployCmd = command "deploy" $ info parser infoMods
       <*>  resourceDirArg
       <**> helper
 
-    infoMods = progDesc $ "Deploy given stack with name STACK_NAME "
+    infoMods = progDesc "Deploy given stack"
+      <> deployHeader
+
+    deployHeader = header $ "Deploy given stack with name STACK_NAME "
       <> "as specified in CONF_FILE. Template identifiers are resolved "
       <> "within the given directory RESOURCE_DIR."
 
