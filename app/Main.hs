@@ -9,7 +9,6 @@ import Conduit
 
 import Control.Exception        (IOException)
 import Control.Exception.Lens   (handling)
-import Control.Monad            ((=<<), join)
 import Control.Monad.Catch      (handle, MonadCatch)
 import Control.Monad.Reader
 import Control.Monad.Trans.AWS
@@ -26,8 +25,28 @@ import Path.IO
 
 import Relude
 
+
+data Options = Options
+  { confFile  :: FilePath
+  , mode      :: Mode
+  }
+  
+data Mode
+  = Create
+      { disableRollback :: Bool
+      , stackName       :: StackName
+      , resourceDir     :: FilePath
+      }
+  | Delete
+      { stackName :: StackName
+      }
+  | Deploy
+      { stackName   :: StackName
+      , resourceDir :: FilePath
+      }
+
 main :: IO ()
-main = join . liftIO . execParser $ info parser infoMods
+main = run =<< execParser (info parser infoMods)
   where
     infoMods = fullDesc <> header
       (  "launchpad "
@@ -35,17 +54,24 @@ main = join . liftIO . execParser $ info parser infoMods
       <> " - Simplify deployment of nested stacks"
       )
 
-parser :: Parser (IO ())
-parser = subparser commands <**> helper
-  where
-    commands = createCmd <> deleteCmd <> deployCmd
+    parser = Options
+      <$>  confFileOpt
+      <*>  subparser (createCmd <> deleteCmd <> deployCmd)
+      <**> helper
 
-createCmd :: Mod CommandFields (IO ())
+    run Options{..} = handleError $ do
+      conf <- readConfig =<< resolveFile' confFile
+      runResourceT . runAWST conf . runPretty initPretty $ do
+        case mode of
+          Create{..} -> runCreateStack disableRollback stackName =<< resolveDir' resourceDir
+          Delete{..} -> runDeleteStack stackName
+          Deploy{..} -> runDeployStack stackName =<< resolveDir' resourceDir
+
+createCmd :: Mod CommandFields Mode
 createCmd = command "create" $ info parser infoMods
   where
-    parser = run
-      <$>  confFileOpt
-      <*>  disableRollbackSwitch
+    parser = Create
+      <$>  disableRollbackSwitch
       <*>  stackNameArg
       <*>  resourceDirArg
       <**> helper
@@ -56,36 +82,22 @@ createCmd = command "create" $ info parser infoMods
       <> "as specified in CONF_FILE. Template identifiers are resolved "
       <> "within the given directory RESOURCE_DIR."
 
-    run confFile disableRollback stackName resourceDir = handleError $ do
-      conf <- readConfig =<< resolveFile' confFile
-      runResourceT . runAWST conf . runPretty initPretty $ do
-        stack <- findStack stackName =<< asks _stacks
-        void . createStackAction disableRollback stack =<< resolveDir' resourceDir
-
-deleteCmd :: Mod CommandFields (IO ())
+deleteCmd :: Mod CommandFields Mode
 deleteCmd = command "delete" $ info parser infoMods
   where
-    parser = run
-      <$>  confFileOpt
-      <*>  stackNameArg
+    parser = Delete
+      <$>  stackNameArg
       <**> helper
 
     infoMods = progDesc "Delete given stack" <> createHeader
 
     createHeader = header $ "Delete given stack with name STACK_NAME as specified in CONF_FILE."
 
-    run confFile stackName = handleError $ do
-      conf <- readConfig =<< resolveFile' confFile
-      runResourceT . runAWST conf . runPretty initPretty $ do
-        stack <- findStack stackName =<< asks _stacks
-        void $ deleteStackAction stack
-
-deployCmd :: Mod CommandFields (IO ())
+deployCmd :: Mod CommandFields Mode
 deployCmd = command "deploy" $ info parser infoMods
   where
-    parser = run
-      <$>  confFileOpt
-      <*>  stackNameArg
+    parser = Deploy
+      <$>  stackNameArg
       <*>  resourceDirArg
       <**> helper
 
@@ -94,12 +106,6 @@ deployCmd = command "deploy" $ info parser infoMods
     deployHeader = header $ "Deploy given stack with name STACK_NAME "
       <> "as specified in CONF_FILE. Template identifiers are resolved "
       <> "within the given directory RESOURCE_DIR."
-
-    run confFile stackName resourceDir = handleError $ do
-      conf <- readConfig =<< resolveFile' confFile
-      runResourceT . runAWST conf . runPretty initPretty $ do
-        stack <- findStack stackName =<< asks _stacks
-        void . deployStackAction stack =<< resolveDir' resourceDir
 
 confFileOpt :: Parser FilePath
 confFileOpt = strOption $

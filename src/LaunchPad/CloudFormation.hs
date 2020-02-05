@@ -3,9 +3,9 @@
 {-# LANGUAGE RecordWildCards   #-}
 
 module LaunchPad.CloudFormation
-  ( createStackAction
-  , deleteStackAction
-  , deployStackAction
+  ( runCreateStack
+  , runDeleteStack
+  , runDeployStack
   , findStack
   )
   where
@@ -27,28 +27,31 @@ import           Path
 import           Relude                            hiding (toText)
 
 
-createStackAction :: (AWSConstraint' m, PrettyPrint m) => Bool -> Stack -> Path Abs Dir -> m ()
-createStackAction disableRollback (stack @ Stack{..}) resourceDir  = do
+runCreateStack :: (AWSConstraint' m, PrettyPrint m) => Bool -> StackName -> Path Abs Dir -> m ()
+runCreateStack disableRollback stackName resourceDir  = do
+  (stack @ Stack{..}) <- findStack stackName =<< asks _stacks
   uploadResources stack resourceDir
   withBlock ("Create stack " <> pretty _stackName) $ do
     createStack disableRollback stack
     await (stackCreateOrUpdateComplete "Creating stack") (createDescribeStackReq _stackName)
     reportSuccess "Stack creation complete"
 
-deleteStackAction :: (AWSConstraint' m, PrettyPrint m) => Stack -> m ()
-deleteStackAction (stack @ Stack{..}) = do
+runDeleteStack :: (AWSConstraint' m, PrettyPrint m) => StackName -> m ()
+runDeleteStack stackName = do
+    (stack @ Stack{..}) <- findStack stackName =<< asks _stacks
     withBlock ("Delete stack " <> pretty _stackName) $
       ifM (stackExists _stackName) deleteStack' err
   where
     deleteStack' = do
-      deleteStack _stackName
-      await deleteStackComplete (createDescribeStackReq _stackName)
+      deleteStack stackName
+      await deleteStackComplete (createDescribeStackReq stackName)
       reportSuccess "Stack deletion complete"
 
-    err = throwM . StackNotFoundException . renderDoc $ "Stack " <> pretty _stackName <> " does not exist"
+    err = throwM . StackNotFoundException . renderDoc $ "Stack " <> pretty stackName <> " does not exist"
 
-deployStackAction :: (AWSConstraint' m, PrettyPrint m) => Stack -> Path Abs Dir -> m ()
-deployStackAction (stack @ Stack{..}) resourceDir = do
+runDeployStack :: (AWSConstraint' m, PrettyPrint m) => StackName -> Path Abs Dir -> m ()
+runDeployStack stackName resourceDir = do
+    (stack @ Stack{..})  <- findStack stackName =<< asks _stacks
     uploadResources stack resourceDir 
     withBlock ("Deploy stack " <> pretty _stackName) $ do
       resBucketName <- asks _resourceBucketName
@@ -62,7 +65,7 @@ deployStackAction (stack @ Stack{..}) resourceDir = do
         await (stackCreateOrUpdateComplete "Deploying stack") (createDescribeStackReq _stackName)
         reportSuccess "Stack deployment complete"
   where
-    csName = ChangeSetName . unStackName $ _stackName
+    csName = ChangeSetName . unStackName $ stackName
 
     parser "y" = Just True
     parser "n" = Just False
