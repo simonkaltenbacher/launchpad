@@ -4,10 +4,10 @@ cabal-version: 1.12
 --
 -- see: https://github.com/sol/hpack
 --
--- hash: 0770ad38771b5756283f61b1210c77d44a167995e2fa6662ed4fa65b0e039aad
+-- hash: 4d2c4806895d8f4ebcee4f9bbec722056e7de43a6122cd16311ecb9f1f1206a7
 
 name:           launchpad
-version:        0.3.0-alpha
+version:        0.3.0-beta
 description:    Please see the README on GitHub at <https://github.com/simonkaltenbacher/launchpad#readme>
 homepage:       https://github.com/simonkaltenbacher/launchpad#readme
 bug-reports:    https://github.com/simonkaltenbacher/launchpad/issues
@@ -32,6 +32,7 @@ library
       LaunchPad.Config.Internal
       LaunchPad.Exception
       LaunchPad.PrettyPrint
+      LaunchPad.Version
       LaunchPad.Wait
   other-modules:
       Paths_launchpad

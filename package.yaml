@@ -1,5 +1,5 @@
 name:                launchpad
-version:             0.3.0-alpha
+version:             0.3.0-beta
 github:              "simonkaltenbacher/launchpad"
 license:             BSD3
 author:              "Simon Kaltenbacher"
