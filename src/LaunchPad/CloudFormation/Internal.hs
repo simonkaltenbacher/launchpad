@@ -13,6 +13,7 @@ module LaunchPad.CloudFormation.Internal
   , ChangeSetName (..)
   , createChangeSet
   , createStack
+  , deleteResources
   , deleteStack
   , deleteStackComplete
   , describeStack
@@ -126,6 +127,14 @@ uploadResource rid resourceDir = do
       = fmap (toBody . toHashed)
       . (=<<) (liftIO . readFile . toFilePath)
       . genLocalPath resourceDir
+
+deleteResources :: AWSConstraint' m => [ResourceId] -> m ()
+deleteResources rids = void . send =<< createReq <$> asks _resourceBucketName
+  where
+    createReq resBucketName = S3.deleteObjects (S3.BucketName resBucketName) resToDelete
+
+    resToDelete = S3.delete'
+      & S3.dObjects .~ fmap (S3.objectIdentifier . S3.ObjectKey . unResourceId) rids
 
 describeChangeSet :: AWSConstraint' m => ChangeSetId -> m CF.DescribeChangeSetResponse
 describeChangeSet = send . CF.describeChangeSet . unChangeSetId
