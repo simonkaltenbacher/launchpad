@@ -205,7 +205,7 @@ deleteStackComplete = WaitCondition {..}
       . preview _ServiceError
 
     handleResp resp = case resp ^? CF.dsrsStacks . ix 0 . CF.sStackStatus of
-      Just CF.SSDeleteFailed     -> WaitSuccess ()
+      Just CF.SSDeleteComplete   -> WaitSuccess ()
       Just CF.SSDeleteInProgress -> WaitRetry
       _                          -> WaitFailure "Failed to delete stack"
 
