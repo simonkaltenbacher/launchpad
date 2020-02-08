@@ -3,7 +3,8 @@
 {-# LANGUAGE RecordWildCards   #-}
 
 module LaunchPad.CloudFormation
-  ( runCreateStack
+  ( AWSConstraint'
+  , runCreateStack
   , runDeleteStack
   , runDeployStack
   , findStack

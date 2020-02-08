@@ -3,14 +3,14 @@ module LaunchPad.Version
   , launchPadVersionString
   ) where
 
-import Data.String               (String)
 import Data.Version
 
-import Paths_launchpad           (version) 
+import Paths_launchpad (version) 
 
+import Relude
 
 launchPadVersion :: Version
 launchPadVersion = version
 
-launchPadVersionString :: String
-launchPadVersionString = showVersion version
+launchPadVersionString :: Text
+launchPadVersionString = toText . showVersion $ version

@@ -25,53 +25,60 @@ import Path.IO
 
 import Relude
 
+import System.Environment       (getEnv)
 
-data Options = Options
-  { confFile  :: FilePath
-  , mode      :: Mode
-  }
-  
+
 data Mode
   = Create
-      { disableRollback :: Bool
+      { confFile        :: Maybe FilePath
+      , disableRollback :: Bool
       , stackName       :: StackName
       , resourceDir     :: FilePath
       }
   | Delete
-      { stackName :: StackName
+      { confFile  :: Maybe FilePath
+      , stackName :: StackName
       }
   | Deploy
-      { stackName   :: StackName
+      { confFile    :: Maybe FilePath
+      , stackName   :: StackName
       , resourceDir :: FilePath
       }
+  | Version
 
 main :: IO ()
-main = run =<< execParser (info parser infoMods)
+main = handleError $ run =<< execParser (info parser infoMods)
   where
     infoMods = fullDesc <> header
       (  "launchpad "
-      <> launchPadVersionString
+      <> toString launchPadVersionString
       <> " - Simplify deployment of nested stacks"
       )
 
-    parser = Options
-      <$>  confFileOpt
-      <*>  subparser (createCmd <> deleteCmd <> deployCmd)
-      <**> helper
+    parser = subparser (createCmd <> deleteCmd <> deployCmd <> versionCmd) <**> helper
+   
+    run Create{..} = runWithConf confFile $ runCreateStack disableRollback stackName =<< resolveDir' resourceDir
+    run Delete{..} = runWithConf confFile $ runDeleteStack stackName
+    run Deploy{..} = runWithConf confFile $ runDeployStack stackName =<< resolveDir' resourceDir
+    run Version    = putTextLn launchPadVersionString
 
-    run Options{..} = handleError $ do
-      conf <- readConfig =<< resolveFile' confFile
-      runResourceT . runAWST conf . runPretty initPretty $ do
-        case mode of
-          Create{..} -> runCreateStack disableRollback stackName =<< resolveDir' resourceDir
-          Delete{..} -> runDeleteStack stackName
-          Deploy{..} -> runDeployStack stackName =<< resolveDir' resourceDir
+runWithConf
+  :: MonadCatch m
+  => MonadIO m
+  => MonadUnliftIO m
+  => Maybe FilePath
+  -> StateT PrettyState (AWST' Config (ResourceT m)) ()
+  -> m ()
+runWithConf confFile m = do
+  conf <- readConfig =<< resolveFile' =<< maybe (liftIO . getEnv $ "LAUNCHPAD_CONF") pure confFile
+  runResourceT . runAWST conf . runPretty initPretty $ m
 
 createCmd :: Mod CommandFields Mode
 createCmd = command "create" $ info parser infoMods
   where
     parser = Create
-      <$>  disableRollbackSwitch
+      <$>  confFileOpt
+      <*>  disableRollbackSwitch
       <*>  stackNameArg
       <*>  resourceDirArg
       <**> helper
@@ -86,7 +93,8 @@ deleteCmd :: Mod CommandFields Mode
 deleteCmd = command "delete" $ info parser infoMods
   where
     parser = Delete
-      <$>  stackNameArg
+      <$>  confFileOpt
+      <*>  stackNameArg
       <**> helper
 
     infoMods = progDesc "Delete given stack" <> createHeader
@@ -97,7 +105,8 @@ deployCmd :: Mod CommandFields Mode
 deployCmd = command "deploy" $ info parser infoMods
   where
     parser = Deploy
-      <$>  stackNameArg
+      <$>  confFileOpt
+      <*>  stackNameArg
       <*>  resourceDirArg
       <**> helper
 
@@ -107,8 +116,13 @@ deployCmd = command "deploy" $ info parser infoMods
       <> "as specified in CONF_FILE. Template identifiers are resolved "
       <> "within the given directory RESOURCE_DIR."
 
-confFileOpt :: Parser FilePath
-confFileOpt = strOption $
+versionCmd :: Mod CommandFields Mode
+versionCmd = command "version" $ info (pure Version) infoMods
+  where
+    infoMods = progDesc "Show version"
+
+confFileOpt :: Parser (Maybe FilePath)
+confFileOpt = optional $ strOption $
      short   'c'
   <> long    "conf"
   <> metavar "CONF_FILE"
@@ -128,6 +142,11 @@ resourceDirArg :: Parser FilePath
 resourceDirArg = strArgument $
      metavar "RESOURCE_DIR"
   <> help    "Directory where resources such as templates and scripts are located"  
+
+versionSwitch :: Parser Bool
+versionSwitch = switch $
+     long "version"
+  <> help "Show version"
 
 handleError :: forall m. (MonadCatch m, MonadIO m) => m () -> m ()
 handleError
