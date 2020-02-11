@@ -102,6 +102,7 @@ createStack disableRollback Stack{..} =
         & CF.csCapabilities    .~ [CF.CapabilityNamedIAM]
         & CF.csDisableRollback ?~ disableRollback
         & CF.csParameters      .~ fmap (translateParam resBucketName) _stackParams
+        & CF.csRoleARN         .~ _roleArn
         & CF.csTemplateURL     ?~ genS3Url resBucketName _stackTemplateId
 
     handleResp
