@@ -1,11 +1,13 @@
 {-# LANGUAGE ConstraintKinds   #-}
 {-# LANGUAGE FlexibleContexts  #-}
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE RecordWildCards   #-}
 
 module LaunchPad.PrettyPrint
   ( getConfirmation
   , getPrettyState
   , initPretty
+  , mkTable
   , PrettyPrint
   , PrettyState
   , putDocB
@@ -16,17 +18,21 @@ module LaunchPad.PrettyPrint
   , reportError
   , reportSuccess
   , runPretty
+  , Table
+  , tabulate
   , withBlock
   , module Data.Text.Prettyprint.Doc
   ) where
 
 import           Control.Lens
 
+import qualified Data.List.NonEmpty as NE
 import qualified Data.Text as T
 import           Data.Text.Prettyprint.Doc
 import           Data.Text.Prettyprint.Doc.Render.Terminal
 
 import           Relude
+import           Relude.Extra.Foldable1
 
 import qualified Streaming.Prelude as S
 
@@ -98,3 +104,26 @@ reportError :: MonadIO m => Doc AnsiStyle -> m ()
 reportError error = do
   liftIO . putDoc $ annotate (color Red) "ERROR " <> error
   putTextLn ""
+
+newtype Table = Table { _rows :: NonEmpty (NonEmpty (Doc AnsiStyle)) }
+
+mkTable :: [[Doc AnsiStyle]] -> Table
+mkTable = Table . NE.fromList . fmap NE.fromList
+
+tabulate :: Table -> Doc AnsiStyle
+tabulate Table{..} = rows <> line
+  where
+    rows
+      = vsep
+      . NE.toList
+      . fmap (joinCells . padCells)
+      $ _rows
+
+    colWidths
+      = fmap (maximum1 . fmap (T.length . renderDoc))
+      . NE.transpose
+      $ _rows
+
+    padCells = fmap (uncurry fill) . NE.zip colWidths
+
+    joinCells = concatWith (surround "  ")
