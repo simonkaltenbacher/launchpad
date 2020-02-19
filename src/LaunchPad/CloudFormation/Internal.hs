@@ -23,6 +23,8 @@ module LaunchPad.CloudFormation.Internal
   , genLocalPath
   , genS3Url
   , listResourceIds
+  , listStacks
+  , MStack
   , stackCreateOrUpdateComplete
   , stackExists
   , StackId (..)
@@ -60,6 +62,10 @@ import           Path
 
 import           Relude                           hiding (toText)
 
+import           Streaming
+import qualified Streaming.Prelude as S
+
+type MStack = CF.Stack
 
 newtype StackId = StackId { unStackId :: Text }
   deriving (Eq, Generic, Pretty, Show)
@@ -140,7 +146,7 @@ deleteResources rids = void . send =<< createReq <$> asks _resourceBucketName
 describeChangeSet :: AWSConstraint' m => ChangeSetId -> m CF.DescribeChangeSetResponse
 describeChangeSet = send . CF.describeChangeSet . unChangeSetId
 
-describeStack :: AWSConstraint' m => StackName -> m CF.Stack
+describeStack :: AWSConstraint' m => StackName -> m MStack
 describeStack = (=<<) handleResp . send . createReq
   where
     createReq = flip (CF.dStackName ?~) CF.describeStacks . unStackName
@@ -148,6 +154,15 @@ describeStack = (=<<) handleResp . send . createReq
     handleResp
       = maybe (throwM $ InvalidStackStatusException "Invalid stack status") pure
       . (^? CF.dsrsStacks . ix 0)
+
+listStacks :: AWSConstraint' m => Stream (Of (Either Stack MStack)) m ()
+listStacks
+    = S.mapM getOrPass
+    . effect
+    . fmap S.each
+    $ asks _stacks
+  where
+    getOrPass (stack @ Stack{..}) = first (const stack) <$> trying _ServiceError (describeStack _stackName)
 
 executeChangeSet :: AWSConstraint' m => ChangeSetId -> m ()
 executeChangeSet = void . send . CF.executeChangeSet . unChangeSetId
@@ -157,7 +172,7 @@ deleteStack = void . send . CF.deleteStack . unStackName
 
 stackExists :: AWSConstraint' m => StackName -> m Bool
 stackExists
-    = fmap (maybe False exists . (^? _Right . CF.sStackStatus))
+    = fmap (maybe False exists . (^? _Right . CF.staStackStatus))
     . trying _ServiceError . describeStack 
   where
     exists CF.SSDeleteComplete   = False
@@ -195,7 +210,7 @@ changeSetCreateComplete = WaitCondition {..}
   where
     _check _ = either (WaitFailure . renderDoc . pretty) handleResp
 
-    handleResp resp = case  resp ^. CF.desrsStatus of
+    handleResp resp = case  resp ^. CF.dcscrsStatus of
       CF.CSSCreateComplete   -> WaitSuccess resp
       CF.CSSCreateInProgress -> WaitRetry
       CF.CSSCreatePending    -> WaitRetry
@@ -214,12 +229,12 @@ deleteStackComplete = WaitCondition {..}
       . isJust
       . preview _ServiceError
 
-    handleResp resp = case resp ^? CF.dsrsStacks . ix 0 . CF.sStackStatus of
+    handleResp resp = case resp ^? CF.dsrsStacks . ix 0 . CF.staStackStatus of
       Just CF.SSDeleteComplete   -> WaitSuccess ()
       Just CF.SSDeleteInProgress -> WaitRetry
       _                          -> WaitFailure "Failed to delete stack"
 
-    _frequency = 10
+    _frequency = 0
     _waitMessage = "Deleting stack"
 
 stackCreateOrUpdateComplete :: Text -> WaitCondition CF.DescribeStacks CF.DescribeStacksResponse
@@ -227,7 +242,7 @@ stackCreateOrUpdateComplete _waitMessage = WaitCondition {..}
   where
     _check _ = either (WaitFailure . renderDoc . pretty) handleResp
 
-    handleResp resp = case resp ^? CF.dsrsStacks . ix 0 . CF.sStackStatus of
+    handleResp resp = case resp ^? CF.dsrsStacks . ix 0 . CF.staStackStatus of
       Just CF.SSCreateComplete                  -> WaitSuccess resp
       Just CF.SSUpdateComplete                  -> WaitSuccess resp
       Just CF.SSUpdateCompleteCleanupInProgress -> WaitSuccess resp

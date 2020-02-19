@@ -4,7 +4,7 @@ cabal-version: 1.12
 --
 -- see: https://github.com/sol/hpack
 --
--- hash: 318d17638862582775fcadf3e362c5b542f174539b9ae80a19b557fb8d420ea0
+-- hash: 4cf960cb02a973819f2e8996b40e5d28c22866c46984b232d11171bfb04dbba4
 
 name:           launchpad
 version:        0.3.1
@@ -63,6 +63,7 @@ library
     , relude
     , streaming
     , text
+    , time
     , transformers
   default-language: Haskell2010
 
@@ -99,6 +100,7 @@ executable launchpad
     , relude
     , streaming
     , text
+    , time
     , transformers
   default-language: Haskell2010
 
@@ -136,5 +138,6 @@ test-suite launchpad-test
     , relude
     , streaming
     , text
+    , time
     , transformers
   default-language: Haskell2010

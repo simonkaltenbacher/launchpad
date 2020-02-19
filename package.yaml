@@ -35,6 +35,7 @@ dependencies:
 - relude
 - streaming
 - text
+- time
 - transformers
 
 default-extensions: NoImplicitPrelude

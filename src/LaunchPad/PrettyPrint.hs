@@ -22,6 +22,7 @@ module LaunchPad.PrettyPrint
   , tabulate
   , withBlock
   , module Data.Text.Prettyprint.Doc
+  , module Data.Text.Prettyprint.Doc.Render.Terminal
   ) where
 
 import           Control.Lens

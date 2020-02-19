@@ -44,6 +44,9 @@ data Mode
       , stackName   :: StackName
       , resourceDir :: FilePath
       }
+  | List
+      { confFile :: Maybe FilePath
+      }
   | Version
 
 main :: IO ()
@@ -55,11 +58,12 @@ main = handleError $ run =<< execParser (info parser infoMods)
       <> " - Simplify deployment of nested stacks"
       )
 
-    parser = subparser (createCmd <> deleteCmd <> deployCmd <> versionCmd) <**> helper
+    parser = subparser (createCmd <> deleteCmd <> deployCmd <> listCmd <> versionCmd) <**> helper
    
     run Create{..} = runWithConf confFile $ runCreateStack disableRollback stackName =<< resolveDir' resourceDir
     run Delete{..} = runWithConf confFile $ runDeleteStack stackName
     run Deploy{..} = runWithConf confFile $ runDeployStack stackName =<< resolveDir' resourceDir
+    run List{..}   = runWithConf confFile $ runListStacks
     run Version    = putTextLn launchPadVersionString
 
 runWithConf
@@ -115,6 +119,13 @@ deployCmd = command "deploy" $ info parser infoMods
     deployHeader = header $ "Deploy given stack with name STACK_NAME "
       <> "as specified in CONF_FILE. Template identifiers are resolved "
       <> "within the given directory RESOURCE_DIR."
+
+listCmd :: Mod CommandFields Mode
+listCmd = command "list" $ info parser infoMods
+  where
+    parser = List <$> confFileOpt <**> helper
+
+    infoMods = progDesc "List stacks"
 
 versionCmd :: Mod CommandFields Mode
 versionCmd = command "version" $ info (pure Version) infoMods

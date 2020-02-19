@@ -7,6 +7,7 @@ module LaunchPad.CloudFormation
   , runCreateStack
   , runDeleteStack
   , runDeployStack
+  , runListStacks
   , findStack
   )
   where
@@ -16,16 +17,21 @@ import           Control.Lens.Setter               ((?~))
 import           Control.Monad.Catch               (throwM)
 import           Control.Monad.Reader
 
+import           Data.Time.Format
+
 import           LaunchPad.CloudFormation.Internal
 import           LaunchPad.Exception
 import           LaunchPad.PrettyPrint
 import           LaunchPad.Wait
 
 import qualified Network.AWS.CloudFormation as CF
+import           Network.AWS.Data.Time             (UTCTime)
 
 import           Path
 
 import           Relude                            hiding (toText)
+
+import qualified Streaming.Prelude as S
 
 
 runCreateStack :: (AWSConstraint' m, PrettyPrint m) => Bool -> StackName -> Path Abs Dir -> m ()
@@ -56,7 +62,7 @@ runDeployStack stackName resourceDir = do
     uploadResources stack resourceDir 
     withBlock ("Deploy stack " <> pretty _stackName) $ do
       resBucketName <- asks _resourceBucketName
-      csType <- bool CF.Create CF.Update <$> stackExists _stackName
+      csType <- bool CF.CSTCreate CF.CSTUpdate <$> stackExists _stackName
       csId <- createChangeSet csName csType stack
       csCreateComplete <- await changeSetCreateComplete (describeChangeSetReq csId)
       reportSuccess "Created change set"
@@ -71,6 +77,36 @@ runDeployStack stackName resourceDir = do
     parser "y" = Just True
     parser "n" = Just False
     parser _   = Nothing
+
+runListStacks :: (AWSConstraint' m, PrettyPrint m) => m ()
+runListStacks
+    = join
+    . fmap (putDocB . tabulate . mkTable . cons header)
+    . S.toList_
+    . S.map (either formatStack formatMStack)
+    $ listStacks
+  where
+    header :: [Doc AnsiStyle]
+    header =
+      [ "NAME"
+      , "STATUS"
+      , "CREATION_TIME"
+      , "LAST_UPDATE_TIME"
+      ]
+
+    formatStack Stack{..} =
+      [ pretty _stackName
+      , "NOT_MATERIALIZED"
+      , "-"
+      , "-"
+      ]
+
+    formatMStack stack =
+      [ pretty . view CF.staStackName $ stack
+      , formatStackStatus . view CF.staStackStatus $ stack
+      , pretty . view CF.staCreationTime $ stack
+      , maybe "-" pretty . view CF.staLastUpdatedTime $ stack
+      ]
 
 createDescribeStackReq :: StackName -> CF.DescribeStacks
 createDescribeStackReq = flip (CF.dStackName ?~) CF.describeStacks . unStackName
@@ -93,7 +129,7 @@ printChanges = mapM_ printChange . listChanges
   where
     listChanges
       = toListOf
-      $ CF.desrsChanges
+      $ CF.dcscrsChanges
       . traverse
       . CF.cResourceChange
       . _Just
@@ -104,7 +140,30 @@ printChanges = mapM_ printChange . listChanges
       , view CF.rcResourceType $ change
       ]
 
+formatStackStatus :: CF.StackStatus -> Doc AnsiStyle
+formatStackStatus status = case status of
+  CF.SSCreateComplete -> annotate (color Green) "CREATE_COMPLETE"
+  CF.SSCreateFailed -> annotate (color Red) "CREATE_FAILED"
+  CF.SSCreateInProgress -> "CREATE_IN_PROGRESS"
+  CF.SSDeleteComplete -> annotate (color Green) "DELETE_COMPLETE"
+  CF.SSDeleteFailed -> annotate (color Red) "DELETE_FAILED"
+  CF.SSDeleteInProgress -> "DELETE_IN_PROGRESS"
+  CF.SSReviewInProgress -> "REVIEW_IN_PROGRESS"
+  CF.SSRollbackComplete -> annotate (color Yellow) "ROLLBACK_COMPLETE"
+  CF.SSRollbackFailed -> annotate (color Red) "ROLLBACK_FAILED"
+  CF.SSRollbackInProgress -> "ROLLBACK_IN_PROGRESS"
+  CF.SSUpdateComplete -> annotate (color Green) "UPDATE_COMPLETE"
+  CF.SSUpdateCompleteCleanupInProgress -> annotate (color Yellow) "UPDATE_COMPLETE_CLEANUP_IN_PROGRESS"
+  CF.SSUpdateInProgress -> "UPDATE_IN_PROGRESS"
+  CF.SSUpdateRollbackComplete -> annotate (color Yellow) "UPDATE_ROLLBACK_COMPLETE"
+  CF.SSUpdateRollbackCompleteCleanupInProgress -> annotate (color Yellow) "UPDATE_ROLLBACK_COMPLETE_CLEANUP_IN_PROGRESS"
+  CF.SSUpdateRollbackFailed -> annotate (color Red) "UPDATE_ROLLBACK_FAILED"
+  CF.SSUpdateRollbackInProgress -> "UPDATE_ROLLBACK_IN_PROGRESS"
+
 instance Pretty CF.ChangeAction where
   pretty CF.Add    = "ADD"
   pretty CF.Modify = "MODIFY"
   pretty CF.Remove = "REMOVE"
+
+instance Pretty UTCTime where
+  pretty = pretty . formatTime defaultTimeLocale (iso8601DateFormat (Just "%H:%M:%S"))
