@@ -153,7 +153,7 @@ formatStackStatus status = case status of
   CF.SSRollbackFailed -> annotate (color Red) "ROLLBACK_FAILED"
   CF.SSRollbackInProgress -> "ROLLBACK_IN_PROGRESS"
   CF.SSUpdateComplete -> annotate (color Green) "UPDATE_COMPLETE"
-  CF.SSUpdateCompleteCleanupInProgress -> annotate (color Yellow) "UPDATE_COMPLETE_CLEANUP_IN_PROGRESS"
+  CF.SSUpdateCompleteCleanupInProgress -> "UPDATE_COMPLETE_CLEANUP_IN_PROGRESS"
   CF.SSUpdateInProgress -> "UPDATE_IN_PROGRESS"
   CF.SSUpdateRollbackComplete -> annotate (color Yellow) "UPDATE_ROLLBACK_COMPLETE"
   CF.SSUpdateRollbackCompleteCleanupInProgress -> annotate (color Yellow) "UPDATE_ROLLBACK_COMPLETE_CLEANUP_IN_PROGRESS"
