@@ -203,7 +203,7 @@ genS3Url HttpsProtocol resBucketName rid
   <> resBucketName
   <> ".s3.eu-central-1.amazonaws.com/"
   <> unResourceId rid
-genS3url S3Protocol resBucketName rid
+genS3Url S3Protocol resBucketName rid
   =  "s3://"
   <> resBucketName
   <> "/"
