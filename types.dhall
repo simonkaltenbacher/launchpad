@@ -1,4 +1,4 @@
-let Protocol : Type = < HttpsProcotol | S3Protocol >
+let Protocol : Type = < HttpsProtocol | S3Protocol >
 
 let PExpr : Type = < PLit : Text | PResourceId : { protocol : Protocol, resourceId : Text } >
 
