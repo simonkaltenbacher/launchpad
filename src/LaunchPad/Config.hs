@@ -5,6 +5,7 @@ module LaunchPad.Config
   ( Config (..)
   , CI.Param (..)
   , CI.PExpr (..)
+  , CI.Protocol (..)
   , CI.Stack (..)
   , CI.StackName (..)
   , CI.ResourceId (..)

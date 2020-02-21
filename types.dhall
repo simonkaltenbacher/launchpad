@@ -1,4 +1,6 @@
-let PExpr : Type = < PLit : Text | PResourceId : Text >
+let Protocol : Type = < HttpsProcotol | S3Protocol >
+
+let PExpr : Type = < PLit : Text | PResourceId : { protocol : Protocol, resourceId : Text } >
 
 let ServerSideEncryption : Type = < AES256 | AWSKMS >
 
@@ -22,9 +24,10 @@ let DhallConfig : Type =
   }
 
 in
-  { PExpr = PExpr
+  { Param = Param
+  , PExpr = PExpr
+  , Protocol = Protocol
   , ServerSideEncryption = ServerSideEncryption
-  , Param = Param
   , Stack = Stack
   , DhallConfig = DhallConfig
   }

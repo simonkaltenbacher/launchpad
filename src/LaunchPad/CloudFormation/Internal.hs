@@ -44,7 +44,7 @@ import           Control.Monad.IO.Class
 import           Control.Monad.Reader
 import           Control.Monad.Trans.AWS          hiding (await)
 
-import           Data.Foldable                    (find, fold)
+import           Data.Foldable                    (find)
 import           Data.Function                    ((&))
 import           Data.Maybe                       (mapMaybe)
 
@@ -93,7 +93,7 @@ createChangeSet csName csType Stack{..} =
         & CF.ccsCapabilities  .~ [CF.CapabilityNamedIAM]
         & CF.ccsParameters    .~ fmap (translateParam resBucketName) _stackParams
         & CF.ccsRoleARN       .~ _roleArn
-        & CF.ccsTemplateURL   ?~ genS3Url resBucketName _stackTemplateId
+        & CF.ccsTemplateURL   ?~ genS3Url HttpsProtocol resBucketName _stackTemplateId
 
     handleResp
       = maybe (throwM $ InvalidResponseException "Received invalid response") (pure . ChangeSetId)
@@ -109,7 +109,7 @@ createStack disableRollback Stack{..} =
         & CF.csDisableRollback ?~ disableRollback
         & CF.csParameters      .~ fmap (translateParam resBucketName) _stackParams
         & CF.csRoleARN         .~ _roleArn
-        & CF.csTemplateURL     ?~ genS3Url resBucketName _stackTemplateId
+        & CF.csTemplateURL     ?~ genS3Url HttpsProtocol resBucketName _stackTemplateId
 
     handleResp
       = maybe (throwM $ InvalidResponseException "Received invalid response") (pure . StackId)
@@ -182,8 +182,8 @@ stackExists
 listResourceIds :: Stack -> [ResourceId]
 listResourceIds Stack{..} = _stackTemplateId : mapMaybe extract _stackParams
   where
-    extract (Param _ (PResourceId rid)) = pure rid
-    extract _                           = Nothing
+    extract (Param _ (PResourceId _ rid)) = pure rid
+    extract _                             = Nothing
 
 translateParam :: Text -> Param -> CF.Parameter
 translateParam resBucketName (Param pname pvalue) =
@@ -191,26 +191,30 @@ translateParam resBucketName (Param pname pvalue) =
       & CF.pParameterKey   ?~ pname
       & CF.pParameterValue ?~ evalParamExpr pvalue
   where
-    evalParamExpr (PLit value)      = value
-    evalParamExpr (PResourceId rid) = genS3Url resBucketName rid
+    evalParamExpr (PLit value)            = value
+    evalParamExpr (PResourceId proto rid) = genS3Url proto resBucketName rid
 
 genLocalPath :: MonadThrow m => Path Abs Dir -> ResourceId -> m (Path Abs File)
 genLocalPath resourceDir = fmap (resourceDir </>) . parseRelFile . toString . unResourceId
 
-genS3Url :: Text -> ResourceId -> Text
-genS3Url resBucketName rid = fold
-  [ "https://"
-  , resBucketName
-  , ".s3.eu-central-1.amazonaws.com/"
-  , unResourceId rid
-  ]
+genS3Url :: Protocol -> Text -> ResourceId -> Text
+genS3Url HttpsProtocol resBucketName rid
+  =  "https://"
+  <> resBucketName
+  <> ".s3.eu-central-1.amazonaws.com/"
+  <> unResourceId rid
+genS3url S3Protocol resBucketName rid
+  =  "s3://"
+  <> resBucketName
+  <> "/"
+  <> unResourceId rid
 
 changeSetCreateComplete :: WaitCondition CF.DescribeChangeSet CF.DescribeChangeSetResponse
 changeSetCreateComplete = WaitCondition {..}
   where
     _check _ = either (WaitFailure . renderDoc . pretty) handleResp
 
-    handleResp resp = case  resp ^. CF.dcscrsStatus of
+    handleResp resp = case resp ^. CF.dcscrsStatus of
       CF.CSSCreateComplete   -> WaitSuccess resp
       CF.CSSCreateInProgress -> WaitRetry
       CF.CSSCreatePending    -> WaitRetry

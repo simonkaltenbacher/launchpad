@@ -5,6 +5,7 @@ module LaunchPad.Config.Internal
   ( DhallConfig (..)
   , Param (..)
   , PExpr (..)
+  , Protocol (..)
   , Stack (..)
   , StackName (..)
   , ResourceId (..)
@@ -57,9 +58,17 @@ data Param = Param
 
 instance FromDhall Param
 
+data Protocol = HttpsProtocol | S3Protocol
+  deriving (Eq, Generic, Show)
+
+instance FromDhall Protocol
+
 data PExpr
   = PLit Text
-  | PResourceId ResourceId
+  | PResourceId
+      { _protocol   :: Protocol
+      , _resourceId :: ResourceId
+      }
   deriving (Eq, Generic, Show)
 
 instance FromDhall PExpr
