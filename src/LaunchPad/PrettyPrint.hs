@@ -111,6 +111,9 @@ newtype Table = Table { _rows :: NonEmpty (NonEmpty (Doc AnsiStyle)) }
 mkTable :: [[Doc AnsiStyle]] -> Table
 mkTable = Table . NE.fromList . fmap NE.fromList
 
+lengthDoc :: Doc a -> Int
+lengthDoc = T.length . renderDoc . unAnnotate
+
 tabulate :: Table -> Doc AnsiStyle
 tabulate Table{..} = rows <> line
   where
@@ -121,7 +124,7 @@ tabulate Table{..} = rows <> line
       $ _rows
 
     colWidths
-      = fmap (maximum1 . fmap (T.length . renderDoc))
+      = fmap (maximum1 . fmap lengthDoc)
       . NE.transpose
       $ _rows
 
