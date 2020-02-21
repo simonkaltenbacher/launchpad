@@ -238,7 +238,7 @@ deleteStackComplete = WaitCondition {..}
       Just CF.SSDeleteInProgress -> WaitRetry
       _                          -> WaitFailure "Failed to delete stack"
 
-    _frequency = 0
+    _frequency = 10
     _waitMessage = "Deleting stack"
 
 stackCreateOrUpdateComplete :: Text -> WaitCondition CF.DescribeStacks CF.DescribeStacksResponse
