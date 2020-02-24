@@ -86,7 +86,6 @@ runListStacks
     . S.map (either formatStack formatMStack)
     $ listStacks
   where
-    header :: [Doc AnsiStyle]
     header =
       [ "NAME"
       , "STATUS"
