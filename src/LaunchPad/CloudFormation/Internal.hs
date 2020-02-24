@@ -220,7 +220,7 @@ changeSetCreateComplete = WaitCondition {..}
       CF.CSSCreatePending    -> WaitRetry
       _                      -> WaitFailure "Failed to create change set"
 
-    _frequency = 10
+    _frequency = 2
     _waitMessage = "Creating change set"
 
 deleteStackComplete :: WaitCondition CF.DescribeStacks ()
