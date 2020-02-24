@@ -66,7 +66,7 @@ runDeployStack stackName resourceDir = do
       csId <- createChangeSet csName csType stack
       csCreateComplete <- await changeSetCreateComplete (describeChangeSetReq csId)
       reportSuccess "Created change set"
-      withBlock "The following changes will be applied:" $ printChanges csCreateComplete
+      withBlock "The following changes will be applied:" (printChanges csCreateComplete)
       whenM (getConfirmation 3 parser "Do you want to continue? [y/n]: ") $ do
         executeChangeSet csId
         await (stackCreateOrUpdateComplete "Deploying stack") (createDescribeStackReq _stackName)
@@ -81,7 +81,7 @@ runDeployStack stackName resourceDir = do
 runListStacks :: (AWSConstraint' m, PrettyPrint m) => m ()
 runListStacks
     = join
-    . fmap (putDocB . tabulate . mkTable . cons header)
+    . fmap (putDocBLn . tabulate . mkTable . cons header)
     . S.toList_
     . S.map (either formatStack formatMStack)
     $ listStacks
@@ -125,19 +125,31 @@ uploadResources stack resourceDir = withBlock "Uploading resources" $ do
       putTextLn "DONE"
 
 printChanges :: (MonadIO m, PrettyPrint m) => CF.DescribeChangeSetResponse -> m ()
-printChanges = mapM_ printChange . listChanges
+printChanges = putDocBLn . listChanges
   where
     listChanges
-      = toListOf
-      $ CF.dcscrsChanges
+      = tabulate
+      . mkTable
+      . cons header
+      . fmap formatChange
+      . toListOf extractResourceChanges
+
+    extractResourceChanges
+      = CF.dcscrsChanges
       . traverse
       . CF.cResourceChange
       . _Just
 
-    printChange change = putTextBLn . fold . intersperse " " . fmap (fromMaybe "-") $
-      [ fmap (renderDoc . pretty) . view CF.rcAction $ change
-      , view CF.rcLogicalResourceId $ change
-      , view CF.rcResourceType $ change
+    header =
+      [ "ACTION"
+      , "RESOURCE_ID"
+      , "TYPE"
+      ]
+
+    formatChange change = fmap (fromMaybe "-") $
+      [ fmap pretty . view CF.rcAction $ change
+      , fmap pretty . view CF.rcLogicalResourceId $ change
+      , fmap pretty . view CF.rcResourceType $ change
       ]
 
 formatStackStatus :: CF.StackStatus -> Doc AnsiStyle

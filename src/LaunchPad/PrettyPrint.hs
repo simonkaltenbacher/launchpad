@@ -115,14 +115,12 @@ lengthDoc :: Doc a -> Int
 lengthDoc = T.length . renderDoc . unAnnotate
 
 tabulate :: Table -> Doc AnsiStyle
-tabulate Table{..} = rows <> line
+tabulate Table{..}
+    = vsep
+    . NE.toList
+    . fmap (joinCells . padCells)
+    $ _rows
   where
-    rows
-      = vsep
-      . NE.toList
-      . fmap (joinCells . padCells)
-      $ _rows
-
     colWidths
       = fmap (maximum1 . fmap lengthDoc)
       . NE.transpose
