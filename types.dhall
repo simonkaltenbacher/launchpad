@@ -2,6 +2,18 @@ let Protocol : Type = < HttpsProtocol | S3Protocol >
 
 let PExpr : Type = < PLit : Text | PResourceId : { protocol : Protocol, resourceId : Text } >
 
+let https = \(resourceId : Text) ->
+  PExpr.PResourceId
+    { protocol = Protocol.HttpsProtocol
+    , resourceId = resourceId
+    }
+
+let s3 = \(resourceId : Text) ->
+  PExpr.PResourceId
+    { protocol = Protocol.S3Protocol
+    , resourceId = resourceId
+    }
+
 let ServerSideEncryption : Type = < AES256 | AWSKMS >
 
 let Param : Type =
@@ -24,10 +36,12 @@ let DhallConfig : Type =
   }
 
 in
-  { Param = Param
-  , PExpr = PExpr
-  , Protocol = Protocol
+  { https                = https
+  , Param                = Param
+  , PExpr                = PExpr
+  , Protocol             = Protocol
+  , s3                   = s3
   , ServerSideEncryption = ServerSideEncryption
-  , Stack = Stack
-  , DhallConfig = DhallConfig
+  , Stack                = Stack
+  , DhallConfig          = DhallConfig
   }
