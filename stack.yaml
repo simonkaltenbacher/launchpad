@@ -4,10 +4,10 @@ packages:
 - .
 
 extra-deps:
-- amazonka-1.6.1
 - git: https://github.com/simonkaltenbacher/amazonka.git
-  commit: 3caefbf266d84dbfa0f720a629d41a36fe173bcc
+  commit: 7f5f4793edcd041a37d3a27c888cb5535044a1d1
   subdirs:
+  - amazonka
   - amazonka-cloudformation
 - amazonka-core-1.6.1
 - amazonka-s3-1.6.1
