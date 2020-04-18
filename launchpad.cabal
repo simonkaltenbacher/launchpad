@@ -7,7 +7,7 @@ cabal-version: 1.12
 -- hash: 699a612b7b35baec75aa9c04b926b9cf39bb6141a6f18d91ec015c77e14eda2d
 
 name:           launchpad
-version:        0.4.3
+version:        0.5.0
 description:    Please see the README on GitHub at <https://github.com/simonkaltenbacher/launchpad#readme>
 homepage:       https://github.com/simonkaltenbacher/launchpad#readme
 bug-reports:    https://github.com/simonkaltenbacher/launchpad/issues
