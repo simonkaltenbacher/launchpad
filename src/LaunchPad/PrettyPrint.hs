@@ -32,12 +32,12 @@ import qualified Data.Text as T
 import           Data.Text.Prettyprint.Doc
 import           Data.Text.Prettyprint.Doc.Render.Terminal
 
-import           Relude
+import           Relude.Custom
 import           Relude.Extra.Foldable1
 
 import qualified Streaming.Prelude as S
 
-import           System.IO                                  (hFlush, stdout)
+import           System.IO                                 (hFlush)
 
 
 renderDoc :: Doc AnsiStyle -> Text

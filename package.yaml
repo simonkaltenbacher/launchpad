@@ -18,9 +18,9 @@ dependencies:
 - amazonka-s3
 - ansi-terminal
 - async
+- attoparsec
 - base >= 4.7 && < 5
 - bytestring
-- conduit
 - clock
 - dhall
 - exceptions
@@ -33,6 +33,8 @@ dependencies:
 - prettyprinter
 - prettyprinter-ansi-terminal
 - relude
+- replace-attoparsec
+- resourcet
 - streaming
 - text
 - time

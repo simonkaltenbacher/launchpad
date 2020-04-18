@@ -1,24 +1,28 @@
 {-# LANGUAGE ConstraintKinds            #-}
 {-# LANGUAGE DeriveGeneric              #-}
+{-# LANGUAGE ExistentialQuantification  #-}
 {-# LANGUAGE FlexibleContexts           #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE LambdaCase                 #-}
 {-# LANGUAGE OverloadedStrings          #-}
+{-# LANGUAGE RankNTypes                 #-}
 {-# LANGUAGE RecordWildCards            #-}
+{-# LANGUAGE ScopedTypeVariables        #-}
 
 module LaunchPad.CloudFormation.Internal
   ( AWSConstraint'
   , changeSetCreateComplete
-  , ChangeSetId (..)
-  , ChangeSetName (..)
   , createChangeSet
   , createStack
   , deleteResources
   , deleteStack
   , deleteStackComplete
-  , describeStack
   , describeChangeSet
+  , describeStack
+  , describeStackEvents
+  , diagnoseFailure
   , executeChangeSet
+  , findLastExecutionStart
   , findStack
   , genLocalPath
   , genS3Url
@@ -27,28 +31,18 @@ module LaunchPad.CloudFormation.Internal
   , MStack
   , stackCreateOrUpdateComplete
   , stackExists
-  , StackId (..)
   , translateParam
   , uploadResource
   , module LaunchPad.Config
   )
   where
 
-import           Conduit                          (MonadResource)
-
-import           Control.Lens
-import           Control.Lens.Setter              ((.~), (?~))
-import           Control.Lens.Prism               (_Right)
-import           Control.Monad.Catch              (MonadCatch, MonadThrow, throwM)
+import           Control.Lens                     hiding ((??))
+import           Control.Monad.Catch              (MonadCatch)
 import           Control.Monad.IO.Class
 import           Control.Monad.Reader
 import           Control.Monad.Trans.AWS          hiding (await)
-
-import           Data.Foldable                    (find)
-import           Data.Function                    ((&))
-import           Data.Maybe                       (mapMaybe)
-
-import           GHC.Generics                     (Generic)
+import           Control.Monad.Trans.Resource
 
 import           LaunchPad.Config
 import           LaunchPad.Exception
@@ -56,25 +50,17 @@ import           LaunchPad.PrettyPrint
 import           LaunchPad.Wait
 
 import qualified Network.AWS.CloudFormation as CF
+import           Network.AWS.Prelude              (UTCTime)
 import qualified Network.AWS.S3 as S3
 
 import           Path
 
-import           Relude                           hiding (toText)
+import           Relude.Custom
 
 import           Streaming
-import qualified Streaming.Prelude as S
+import qualified Streaming.Prelude.Extra as S
 
 type MStack = CF.Stack
-
-newtype StackId = StackId { unStackId :: Text }
-  deriving (Eq, Generic, Pretty, Show)
-
-newtype ChangeSetName = ChangeSetName { unChangeSetName :: Text }
-  deriving (Eq, Generic, Pretty, Show)
-
-newtype ChangeSetId = ChangeSetId { unChangeSetId :: Text }
-  deriving (Eq, Generic, Pretty, Show)
 
 type AWSConstraint' m = (MonadThrow m, MonadCatch m, MonadResource m, MonadReader Config m)
 
@@ -132,7 +118,7 @@ uploadResource rid resourceDir = do
 
     readBody resourceDir
       = fmap (toBody . toHashed)
-      . (=<<) (liftIO . readFile . toFilePath)
+      . liftD (liftIO . readFile . toFilePath)
       . genLocalPath resourceDir
 
 deleteResources :: AWSConstraint' m => [ResourceId] -> m ()
@@ -143,17 +129,110 @@ deleteResources rids = void . send =<< createReq <$> asks _resourceBucketName
     resToDelete = S3.delete'
       & S3.dObjects .~ fmap (S3.objectIdentifier . S3.ObjectKey . unResourceId) rids
 
-describeChangeSet :: AWSConstraint' m => ChangeSetId -> m CF.DescribeChangeSetResponse
-describeChangeSet = send . CF.describeChangeSet . unChangeSetId
+describeChangeSet :: AWSConstraint' m => ChangeSetIdLike -> m CF.DescribeChangeSetResponse
+describeChangeSet = send . CF.describeChangeSet . unChangeSetIdLike
 
-describeStack :: AWSConstraint' m => StackName -> m MStack
-describeStack = (=<<) handleResp . send . createReq
+describeStack :: AWSConstraint' m => StackIdLike -> m MStack
+describeStack = liftD handleResp . send . createReq
   where
-    createReq = flip (CF.dStackName ?~) CF.describeStacks . unStackName
+    createReq = flip (CF.dStackName ?~) CF.describeStacks . unStackIdLike
 
     handleResp
       = maybe (throwM $ InvalidStackStatusException "Invalid stack status") pure
       . (^? CF.dsrsStacks . ix 0)
+
+describeStackEvents :: AWSConstraint' m => StackIdLike -> Stream (Of CF.StackEvent) m ()
+describeStackEvents stackId = loop =<< next Nothing
+  where
+    createReq ntoken = CF.describeStackEvents
+      & CF.dseStackName ?~ unStackIdLike stackId
+      & CF.dseNextToken .~ ntoken
+
+    next
+      = effect
+      . fmap extract
+      . send
+      . createReq
+
+    extract res
+      = fmap (const $ res ^. CF.dsersNextToken)
+      . S.each
+      . view CF.dsersStackEvents
+      $ res
+
+    loop = maybe mempty (void . liftD loop . next . Just)
+
+diagnoseFailure :: AWSConstraint' m => UTCTime -> StackIdLike -> Stream (Of CF.StackEvent) m ()
+diagnoseFailure lastStart stackId = S.unfoldr (step lastStart) (Just stackId)
+  where
+    -- Choosing m = (->) a turns ap into the s combinator
+    -- ap :: Monad m => m (a -> b) -> m a -> m b 
+    --       ((->) a (b -> c)) -> ((->) a b) -> ((->) a c)
+    --       (a -> b -> c) -> (a -> b) -> a -> c
+    -- ap f g x = f x (g x)
+
+    step :: AWSConstraint' m => UTCTime -> Maybe StackIdLike -> m (Either () (CF.StackEvent, Maybe StackIdLike))
+    step lastStart
+      = fmap (maybeToRight ())
+      . runMaybeT
+      . fmap (ap (,) (fmap fromRawStackId . liftD (view CF.sePhysicalResourceId) . mfilter hasNestedEvents . pure))
+      . liftD (MaybeT . findFailure lastStart)
+      . MaybeT
+      . pure
+
+    hasNestedEvents = ap
+      ((&&) . any (/= unStackIdLike stackId) . view CF.seLogicalResourceId)
+      (any (== "AWS::CloudFormation::Stack") . view CF.seResourceType)
+
+findFailure :: AWSConstraint' m => UTCTime -> StackIdLike -> m (Maybe CF.StackEvent)
+findFailure lastStart
+    = S.minimumOn_ assignPriority
+    . S.filter isFailureEvent
+    . S.filter ((>= lastStart) . view CF.seTimestamp)
+    . describeStackEvents
+  where
+    failureEvents =
+      [ CF.CreateFailed
+      , CF.DeleteFailed
+      , CF.ImportFailed
+      , CF.UpdateFailed
+      , CF.ImportRollbackInProgress
+      , CF.RollbackInProgress
+      , CF.RollbackFailed
+      , CF.UpdateRollbackFailed
+      ]
+
+    isFailureEvent = any (flip elem failureEvents) . view CF.seResourceStatus
+
+    assignPriority ev = case ev ^. CF.seResourceStatus of
+      Just CF.CreateFailed             -> 0
+      Just CF.DeleteFailed             -> 0
+      Just CF.ImportFailed             -> 0
+      Just CF.UpdateFailed             -> 0
+      Just CF.ImportRollbackInProgress -> 1
+      Just CF.RollbackInProgress       -> 1
+      Just CF.RollbackFailed           -> 2
+      Just CF.UpdateRollbackFailed     -> 2
+      _                                -> 3
+    
+findLastExecutionStart :: AWSConstraint' m => StackIdLike -> m UTCTime
+findLastExecutionStart stackId
+    = liftD (maybe (throwM $ InvalidResponseException "Unable to find last stack execution") pure)
+    . S.head_
+    . S.map (view CF.seTimestamp)
+    . S.filter isStartEvent
+    . describeStackEvents
+    $ stackId
+  where
+    startEvents =
+      [ CF.CreateInProgress
+      , CF.DeleteInProgress
+      , CF.UpdateInProgress 
+      ]
+
+    isStartEvent = ap
+      ((&&) . any (== unStackIdLike stackId) . view CF.seLogicalResourceId)
+      (any (flip elem startEvents) . view CF.seResourceStatus)
 
 listStacks :: AWSConstraint' m => Stream (Of (Either Stack MStack)) m ()
 listStacks
@@ -162,15 +241,15 @@ listStacks
     . fmap S.each
     $ asks _stacks
   where
-    getOrPass (stack @ Stack{..}) = first (const stack) <$> trying _ServiceError (describeStack _stackName)
+    getOrPass (stack @ Stack{..}) = first (const stack) <$> trying _ServiceError (describeStack . fromStackName $ _stackName)
 
-executeChangeSet :: AWSConstraint' m => ChangeSetId -> m ()
-executeChangeSet = void . send . CF.executeChangeSet . unChangeSetId
+executeChangeSet :: AWSConstraint' m => ChangeSetIdLike -> m ()
+executeChangeSet = void . send . CF.executeChangeSet . unChangeSetIdLike
 
-deleteStack :: AWSConstraint' m => StackName -> m ()
-deleteStack = void . send . CF.deleteStack . unStackName
+deleteStack :: AWSConstraint' m => StackIdLike -> m ()
+deleteStack = void . send . CF.deleteStack . unStackIdLike
 
-stackExists :: AWSConstraint' m => StackName -> m Bool
+stackExists :: AWSConstraint' m => StackIdLike -> m Bool
 stackExists
     = fmap (maybe False exists . (^? _Right . CF.staStackStatus))
     . trying _ServiceError . describeStack 

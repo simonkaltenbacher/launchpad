@@ -3,13 +3,8 @@
 
 module LaunchPad.Config
   ( Config (..)
-  , CI.Param (..)
-  , CI.PExpr (..)
-  , CI.Protocol (..)
-  , CI.Stack (..)
-  , CI.StackName (..)
-  , CI.ResourceId (..)
   , readConfig
+  , module LaunchPad.Type
   )
   where
 
@@ -18,24 +13,21 @@ import           Control.Monad.Trans.AWS
 import           Control.Lens.Lens               (lens)
 import           Control.Lens.Setter             ((.~))
 
-import           Data.Text                       (Text)
-
-import           GHC.Generics                    (Generic)
-
 import qualified LaunchPad.Config.Internal as CI
+import           LaunchPad.Type
 
 import           Network.AWS.S3.Types            (ServerSideEncryption)
 
 import           Path
 
-import           Relude
+import           Relude.Custom
 
 data Config = Config
   { _env                  :: Env
   , _resourceBucketName   :: Text
   , _sseKmsKeyId          :: Maybe Text
   , _serverSideEncryption :: Maybe ServerSideEncryption
-  , _stacks               :: [CI.Stack]
+  , _stacks               :: [Stack]
   }
   deriving (Generic)
 

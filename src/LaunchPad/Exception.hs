@@ -20,7 +20,7 @@ import GHC.Show                (showsPrec)
 
 import LaunchPad.PrettyPrint
 
-import Relude
+import Relude.Custom
 
 data SomeLaunchPadException = forall e. (Exception e, Pretty e) => SomeLaunchPadException e
   deriving Typeable

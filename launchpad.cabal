@@ -4,7 +4,7 @@ cabal-version: 1.12
 --
 -- see: https://github.com/sol/hpack
 --
--- hash: e337af4a1e306640e4ae82bff2bdb880d11c47c82fa168fad701dd37ac953d1f
+-- hash: 699a612b7b35baec75aa9c04b926b9cf39bb6141a6f18d91ec015c77e14eda2d
 
 name:           launchpad
 version:        0.4.3
@@ -26,14 +26,18 @@ source-repository head
 
 library
   exposed-modules:
+      LaunchPad.AWS
       LaunchPad.CloudFormation
       LaunchPad.CloudFormation.Internal
       LaunchPad.Config
       LaunchPad.Config.Internal
       LaunchPad.Exception
       LaunchPad.PrettyPrint
+      LaunchPad.Type
       LaunchPad.Version
       LaunchPad.Wait
+      Relude.Custom
+      Streaming.Prelude.Extra
   other-modules:
       Paths_launchpad
   hs-source-dirs:
@@ -46,10 +50,10 @@ library
     , amazonka-s3
     , ansi-terminal
     , async
+    , attoparsec
     , base >=4.7 && <5
     , bytestring
     , clock
-    , conduit
     , dhall
     , exceptions
     , formatting
@@ -61,6 +65,8 @@ library
     , prettyprinter
     , prettyprinter-ansi-terminal
     , relude
+    , replace-attoparsec
+    , resourcet
     , streaming
     , text
     , time
@@ -82,10 +88,10 @@ executable launchpad
     , amazonka-s3
     , ansi-terminal
     , async
+    , attoparsec
     , base >=4.7 && <5
     , bytestring
     , clock
-    , conduit
     , dhall
     , exceptions
     , formatting
@@ -98,6 +104,8 @@ executable launchpad
     , prettyprinter
     , prettyprinter-ansi-terminal
     , relude
+    , replace-attoparsec
+    , resourcet
     , streaming
     , text
     , time
@@ -120,10 +128,10 @@ test-suite launchpad-test
     , amazonka-s3
     , ansi-terminal
     , async
+    , attoparsec
     , base >=4.7 && <5
     , bytestring
     , clock
-    , conduit
     , dhall
     , exceptions
     , formatting
@@ -136,6 +144,8 @@ test-suite launchpad-test
     , prettyprinter
     , prettyprinter-ansi-terminal
     , relude
+    , replace-attoparsec
+    , resourcet
     , streaming
     , text
     , time

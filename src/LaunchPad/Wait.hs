@@ -21,7 +21,7 @@ import           Formatting.Clock         (timeSpecs)
 import           LaunchPad.Exception
 import           LaunchPad.PrettyPrint
 
-import           Relude
+import           Relude.Custom
 
 import qualified Streaming.Prelude as S
 

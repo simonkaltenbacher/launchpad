@@ -1,18 +1,17 @@
-resolver: lts-14.21
+# resolver: lts-14.21
+resolver: lts-15.8
 
 packages:
 - .
 
 extra-deps:
 - git: https://github.com/simonkaltenbacher/amazonka.git
-  commit: 7f5f4793edcd041a37d3a27c888cb5535044a1d1
+  commit: b5a7f691d0e779dce7c7ca1ce38f9c72fed34c84
   subdirs:
   - amazonka
   - amazonka-cloudformation
 - amazonka-core-1.6.1
 - amazonka-s3-1.6.1
-- dhall-1.29.0
-- prettyprinter-1.6.0
 - prettyprinter-ansi-terminal-1.1.1.2
 
 ghc-options:

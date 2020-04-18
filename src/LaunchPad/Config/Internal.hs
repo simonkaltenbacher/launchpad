@@ -3,30 +3,21 @@
 
 module LaunchPad.Config.Internal
   ( DhallConfig (..)
-  , Param (..)
-  , PExpr (..)
-  , Protocol (..)
-  , Stack (..)
-  , StackName (..)
-  , ResourceId (..)
   , readDhallConfig
   )
   where
 
-import Data.Text                 (dropWhile, pack, Text)
-import Data.Text.Prettyprint.Doc
+import Data.Text                 (dropWhile)
 
 import Dhall
 
-import GHC.Generics              (Generic)
-
 import Network.AWS.S3.Types      (ServerSideEncryption)
+
+import LaunchPad.Type
 
 import Path
 
-import Relude                    hiding (dropWhile)
-
-import Text.Read                 (readsPrec)
+import Relude.Custom             hiding (dropWhile)
 
 
 data DhallConfig = DhallConfig
@@ -39,52 +30,6 @@ data DhallConfig = DhallConfig
 
 instance FromDhall DhallConfig
 instance FromDhall ServerSideEncryption
-
-data Stack = Stack
-  { _roleArn         :: Maybe Text
-  , _stackName       :: StackName
-  , _stackTemplateId :: ResourceId
-  , _stackParams     :: [Param]
-  }
-  deriving (Eq, Generic, Show)
-
-instance FromDhall Stack
-
-data Param = Param
-  { _paramName  :: Text
-  , _paramValue :: PExpr
-  }
-  deriving (Eq, Generic, Show)
-
-instance FromDhall Param
-
-data Protocol = HttpsProtocol | S3Protocol
-  deriving (Eq, Generic, Show)
-
-instance FromDhall Protocol
-
-data PExpr
-  = PLit Text
-  | PResourceId
-      { _protocol   :: Protocol
-      , _resourceId :: ResourceId
-      }
-  deriving (Eq, Generic, Show)
-
-instance FromDhall PExpr
-
-newtype StackName = StackName { unStackName :: Text }
-  deriving (Eq, Generic, Pretty, Show)
-
-instance FromDhall StackName
-
-instance Read StackName where
-  readsPrec p str = [(StackName $ pack str, mempty)]
-
-newtype ResourceId = ResourceId { unResourceId :: Text }
-  deriving (Eq, Generic, Pretty, Show)
-
-instance FromDhall ResourceId
 
 readDhallConfig :: MonadIO m => Path Abs File -> m DhallConfig
 readDhallConfig = liftIO . inputFile (autoWith interpretOptions) . toFilePath

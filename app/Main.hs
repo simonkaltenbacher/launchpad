@@ -5,13 +5,12 @@
 
 module Main where
 
-import Conduit
-
 import Control.Exception        (IOException)
 import Control.Exception.Lens   (handling)
 import Control.Monad.Catch      (handle, MonadCatch)
 import Control.Monad.Reader
 import Control.Monad.Trans.AWS
+import Control.Monad.Trans.Resource
 
 import LaunchPad.CloudFormation
 import LaunchPad.Config
@@ -23,29 +22,33 @@ import Options.Applicative
 
 import Path.IO
 
-import Relude
+import Relude.Custom
 
 import System.Environment       (getEnv)
 
 
 data Mode
   = Create
-      { confFile        :: Maybe FilePath
-      , disableRollback :: Bool
-      , stackName       :: StackName
-      , resourceDir     :: FilePath
+      { _confFile        :: Maybe FilePath
+      , _disableRollback :: Bool
+      , _stackName       :: StackName
+      , _resourceDir     :: FilePath
       }
   | Delete
-      { confFile  :: Maybe FilePath
-      , stackName :: StackName
+      { _confFile  :: Maybe FilePath
+      , _stackName :: StackName
       }
   | Deploy
-      { confFile    :: Maybe FilePath
-      , stackName   :: StackName
-      , resourceDir :: FilePath
+      { _confFile    :: Maybe FilePath
+      , _stackName   :: StackName
+      , _resourceDir :: FilePath
+      }
+  | Diagnose
+      { _confFile  :: Maybe FilePath
+      , _stackName :: StackName
       }
   | List
-      { confFile :: Maybe FilePath
+      { _confFile :: Maybe FilePath
       }
   | Version
 
@@ -58,13 +61,14 @@ main = handleError $ run =<< execParser (info parser infoMods)
       <> " - Simplify deployment of nested stacks"
       )
 
-    parser = subparser (createCmd <> deleteCmd <> deployCmd <> listCmd <> versionCmd) <**> helper
+    parser = subparser (createCmd <> deleteCmd <> deployCmd <> diagnoseCmd <> listCmd <> versionCmd) <**> helper
    
-    run Create{..} = runWithConf confFile $ runCreateStack disableRollback stackName =<< resolveDir' resourceDir
-    run Delete{..} = runWithConf confFile $ runDeleteStack stackName
-    run Deploy{..} = runWithConf confFile $ runDeployStack stackName =<< resolveDir' resourceDir
-    run List{..}   = runWithConf confFile $ runListStacks
-    run Version    = putTextLn launchPadVersionString
+    run Create{..}   = runWithConf _confFile $ runCreateStack _disableRollback _stackName =<< resolveDir' _resourceDir
+    run Delete{..}   = runWithConf _confFile $ runDeleteStack _stackName
+    run Deploy{..}   = runWithConf _confFile $ runDeployStack _stackName =<< resolveDir' _resourceDir
+    run Diagnose{..} = runWithConf _confFile $ runDiagnoseStack _stackName
+    run List{..}     = runWithConf _confFile $ runListStacks
+    run Version      = putTextLn launchPadVersionString
 
 runWithConf
   :: MonadCatch m
@@ -119,6 +123,20 @@ deployCmd = command "deploy" $ info parser infoMods
     deployHeader = header $ "Deploy given stack with name STACK_NAME "
       <> "as specified in CONF_FILE. Template identifiers are resolved "
       <> "within the given directory RESOURCE_DIR."
+
+diagnoseCmd :: Mod CommandFields Mode
+diagnoseCmd = command "diagnose" $ info parser infoMods
+  where
+    parser = Diagnose
+      <$>  confFileOpt
+      <*>  stackNameArg
+      <**> helper
+
+    -- TODO: Find better description
+    infoMods = progDesc "Retrieves errors of the given stack's last execution" <> createHeader
+
+    createHeader = header $ "Retrieves errors of the given stack's last execution."
+      <> " Helpful to identify the cause of a stack execution failure."
 
 listCmd :: Mod CommandFields Mode
 listCmd = command "list" $ info parser infoMods

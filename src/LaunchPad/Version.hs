@@ -7,7 +7,7 @@ import Data.Version
 
 import Paths_launchpad (version) 
 
-import Relude
+import Relude.Custom
 
 launchPadVersion :: Version
 launchPadVersion = version
