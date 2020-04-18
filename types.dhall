@@ -2,6 +2,8 @@ let Protocol : Type = < HttpsProtocol | S3Protocol >
 
 let PExpr : Type = < PLit : Text | PResourceId : { protocol : Protocol, resourceId : Text } >
 
+let lit = \(value : Text) -> PExpr.PLit value
+
 let https = \(resourceId : Text) ->
   PExpr.PResourceId
     { protocol = Protocol.HttpsProtocol
@@ -37,6 +39,7 @@ let DhallConfig : Type =
 
 in
   { https                = https
+  , lit                  = lit
   , Param                = Param
   , PExpr                = PExpr
   , Protocol             = Protocol
