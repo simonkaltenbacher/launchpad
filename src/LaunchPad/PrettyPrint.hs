@@ -26,6 +26,7 @@ module LaunchPad.PrettyPrint
   ) where
 
 import           Control.Lens
+import           Control.Monad                             (ap)
 
 import qualified Data.List.NonEmpty as NE
 import qualified Data.Text as T
@@ -122,7 +123,11 @@ tabulate Table{..}
     $ _rows
   where
     colWidths
-      = fmap (maximum1 . fmap lengthDoc)
+      = fromList
+      . uncurry (<>)
+      . second (fmap (const 0))
+      . ap (flip NE.splitAt) ((subtract 1) . NE.length)
+      . fmap (maximum1 . fmap lengthDoc)
       . NE.transpose
       $ _rows
 
